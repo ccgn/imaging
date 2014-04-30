@@ -10,6 +10,7 @@ use png::PNGDecoder;
 use ppm::PPMEncoder;
 
 mod colortype;
+mod hash;
 mod deflate;
 mod zlib;
 mod jpeg;

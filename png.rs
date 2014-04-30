@@ -6,6 +6,7 @@ use std::str;
 use std::slice;
 
 use colortype;
+use hash::Crc32;
 use zlib::ZlibDecoder;
 
 static PNGSIGNATURE: &'static [u8] = &[137, 80, 78, 71, 13, 10, 26, 10];
@@ -33,6 +34,7 @@ pub struct PNGDecoder<R> {
 	pub palette: Option<~[(u8, u8, u8)]>,
 
 	inner: ZlibDecoder<IDATReader<R>>,	
+	crc: Crc32,
 	previous: ~[u8],
 	state: PNGState,
 
@@ -61,6 +63,7 @@ impl<R: Reader> PNGDecoder<R> {
 			previous: ~[],
 			state: Start,
 			inner: ZlibDecoder::new(idat_reader),
+			crc: Crc32::new(),
 
 			width: 0,
 			height: 0,
@@ -128,6 +131,7 @@ impl<R: Reader> PNGDecoder<R> {
 	}
 
 	fn parse_IHDR(&mut self, buf: ~[u8]) -> Result<(), PNGError> {
+		self.crc.update(buf.as_slice());
 		let mut m = MemReader::new(buf);
 
 		self.width = m.read_be_u32().unwrap();
@@ -189,6 +193,8 @@ impl<R: Reader> PNGDecoder<R> {
 	}
 
 	fn parse_PLTE(&mut self, buf: ~[u8]) -> Result<(), PNGError> {
+		self.crc.update(buf.as_slice());
+
 		let len = buf.len() / 3;	
 		
 		if len > 256 || len > (1 << self.bit_depth) || buf.len() % 3 != 0{
@@ -228,6 +234,8 @@ impl<R: Reader> PNGDecoder<R> {
 			
 			self.chunk_length = length;
 			self.chunk_type   = chunk.clone();
+
+			self.crc.update(chunk);
 			
 			let s = {
 				let a = str::from_utf8_owned(self.chunk_type.clone());
@@ -261,21 +269,31 @@ impl<R: Reader> PNGDecoder<R> {
 				("IDAT", HaveIHDR) if self.colour_type != 3 => {
 					self.state = HaveFirstIDat;
 					self.inner.inner().set_inital_length(self.chunk_length);	
+					self.inner.inner().crc.update(self.chunk_type.as_slice());
+
 					break;
 				}
 
 				("IDAT", HavePLTE) if self.colour_type == 3 => {
 					self.state = HaveFirstIDat;
-					self.inner.inner().set_inital_length(self.chunk_length);			
+					self.inner.inner().set_inital_length(self.chunk_length);
+					self.inner.inner().crc.update(self.chunk_type.as_slice());
+			
 					break;
 				}
 
 				_ => {
-					let _ = try!(self.inner.inner().r.read_exact(length as uint));
+					let b = try!(self.inner.inner().r.read_exact(length as uint));
+					self.crc.update(b);
 				}
 			}
 
-			let _crc = try!(self.inner.inner().r.read_be_u32());
+			let chunk_crc = try!(self.inner.inner().r.read_be_u32());
+			let crc = self.crc.checksum();
+
+			assert!(crc == chunk_crc);
+
+			self.crc.reset();
 		}
 
 		Ok(())
@@ -321,7 +339,7 @@ fn unfilter_scanline(filter: u8, bpp: uint, previous: &[u8], scanline: &mut [u8]
 	}
 }
 
-fn abs(a: int) -> int {
+fn abs(a: i32) -> i32 {
 	if a < 0 {
 		a * -1
 	} else {
@@ -330,9 +348,9 @@ fn abs(a: int) -> int {
 }
 
 fn filter_paeth(a: u8, b: u8, c: u8) -> u8 {
-	let ia = a as int;
-	let ib = b as int;
-	let ic = c as int;
+	let ia = a as i32;
+	let ib = b as i32;
+	let ic = c as i32;
 
 	let p = ia + ib - ic;
 	
@@ -351,18 +369,19 @@ fn filter_paeth(a: u8, b: u8, c: u8) -> u8 {
 
 pub struct IDATReader<R> {
 	pub r: R,
+	pub crc: Crc32,
+	
 	eof: bool,
 	chunk_length: u32,
-	chunk_crc: u32,
 }
 
 impl<R:Reader> IDATReader<R> {
 	pub fn new(r: R) -> IDATReader<R> {
 		IDATReader {
 			r: r,
+			crc: Crc32::new(),
 			eof: false,
 			chunk_length: 0,
-			chunk_crc: 0,
 		}
 	}
 
@@ -382,11 +401,17 @@ impl<R: Reader> Reader for IDATReader<R> {
 
 		while start < len {
 			while self.chunk_length == 0 {
-				self.chunk_crc    = try!(self.r.read_be_u32());
+				let chunk_crc = try!(self.r.read_be_u32());
+				let crc = self.crc.checksum();
+
+				assert!(crc == chunk_crc);
+				self.crc.reset();
+
 				self.chunk_length = try!(self.r.read_be_u32());
 				
 				let v = try!(self.r.read_exact(4));
-						
+				self.crc.update(v.as_slice());
+				
 				match str::from_utf8(v.as_slice()) {
 					Some("IDAT") => (),
 					_ 			 => {
@@ -402,7 +427,9 @@ impl<R: Reader> Reader for IDATReader<R> {
 			let r = try!(self.r.read(slice));
 
 			start += r;
+
 			self.chunk_length -= r as u32;
+			self.crc.update(slice.as_slice());
 		}
 
 		Ok(start)

@@ -1,24 +1,23 @@
 use std::io;
 use std::io::IoResult;
 
+use hash::Adler32;
 use deflate::Inflater;
 
 enum ZlibState {Start, CompressedData, End}
 
 pub struct ZlibDecoder<R> {
 	inflate: Inflater<R>,
+	adler: Adler32,
 	state: ZlibState,
-	s1: u32,
-	s2: u32
 }
 
 impl<R: Reader> ZlibDecoder<R> {
 	pub fn new(r: R) -> ZlibDecoder<R> {
 		ZlibDecoder {
 			inflate: Inflater::new(r),
+			adler: Adler32::new(),
 			state: Start,
-			s1: 1,
-			s2: 0,
 		}
 	}
 
@@ -44,10 +43,12 @@ impl<R: Reader> ZlibDecoder<R> {
 	}
 
 	fn read_checksum(&mut self) -> IoResult<()> {
-		let adler32 = try!(self.inner().read_be_u32());
-		let sum = (self.s2 << 16) | self.s1;
+		let stream_adler32 = try!(self.inner().read_be_u32());
+		let adler32 = self.adler.checksum();
 
-		assert!(adler32 == sum);
+		assert!(adler32 == stream_adler32);
+
+		self.adler.reset();
 
 		Ok(())
 	}
@@ -59,13 +60,7 @@ impl<R: Reader> Reader for ZlibDecoder<R> {
 			CompressedData => {
 				match self.inflate.read(buf) {
 					Ok(n) => {
-						for &i in buf.slice_to(n).iter() {
-							self.s1 = self.s1 + i as u32;
-							self.s2 = self.s1 + self.s2;
-
-							self.s1 %= 65521;
-							self.s2 %= 65521;
-						}
+						self.adler.update(buf.slice_to(n));
 
 						if self.inflate.eof() {
 							let _ = try!(self.read_checksum()); 
