@@ -56,9 +56,7 @@ fn main() {
 	println!("{:?}", c);
 	println!("{} bytes", out.len());
 	println!("decoded in {} ms", (after - now) / (1000 * 1000));
-
-	let out = PPMEncoder::new().encode(out.as_slice(), w, h, c);
-
-	let mut fout = File::create(&Path::new(os::args()[1] + ".ppm")).unwrap();
-	let _ = fout.write(out);
+	
+	let fout = File::create(&Path::new(os::args()[1] + ".ppm")).unwrap();
+	let _ = PPMEncoder::new(fout).encode(out.as_slice(), w, h, c);
 }
