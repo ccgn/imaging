@@ -10,7 +10,7 @@ use zlib::ZlibDecoder;
 
 static PNGSIGNATURE: &'static [u8] = &[137, 80, 78, 71, 13, 10, 26, 10];
 
-#[deriving(Eq, Show)]
+#[deriving(Eq)]
 enum PNGState {
 	Start,
 	HaveSignature,
@@ -271,8 +271,7 @@ impl<R: Reader> PNGDecoder<R> {
 				}
 
 				_ => {
-					//debug!("ignoring chunk: {0}:{1}", a, chunk.as_slice());
-					let _data = try!(self.inner.inner().r.read_exact(length as uint));
+					let _ = try!(self.inner.inner().r.read_exact(length as uint));
 				}
 			}
 
@@ -285,7 +284,6 @@ impl<R: Reader> PNGDecoder<R> {
 
 fn unfilter_scanline(filter: u8, bpp: uint, previous: &[u8], scanline: &mut [u8]) {
 	let len = scanline.len();
-	//FIXME use iterators
 	match filter {
 		0 => (),
 		
