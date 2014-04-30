@@ -33,7 +33,7 @@ enum PNGError {
 pub struct PNGDecoder<R> {
 	pub palette: Option<~[(u8, u8, u8)]>,
 
-	inner: ZlibDecoder<IDATReader<R>>,	
+	z: ZlibDecoder<IDATReader<R>>,	
 	crc: Crc32,
 	previous: ~[u8],
 	state: PNGState,
@@ -62,7 +62,7 @@ impl<R: Reader> PNGDecoder<R> {
 
 			previous: ~[],
 			state: Start,
-			inner: ZlibDecoder::new(idat_reader),
+			z: ZlibDecoder::new(idat_reader),
 			crc: Crc32::new(),
 
 			width: 0,
@@ -92,11 +92,11 @@ impl<R: Reader> PNGDecoder<R> {
 			let _ = try!(self.read_metadata());
 		}
 
-		let filter  = try!(self.inner.read_byte());
+		let filter  = try!(self.z.read_byte());
 		let mut have = 0;	
 		
 		while have < buf.len() {
-			let r = try!(self.inner.read(buf.mut_slice_from(have)));
+			let r = try!(self.z.read(buf.mut_slice_from(have)));
 			have += r;
 		}
 		assert!(have == buf.len());
@@ -125,7 +125,7 @@ impl<R: Reader> PNGDecoder<R> {
 	}
 
 	fn read_signature(&mut self) -> IoResult<bool> {
-		let png = try!(self.inner.inner().r.read_exact(8)); 
+		let png = try!(self.z.inner().r.read_exact(8)); 
 		
 		Ok(png.as_slice() == PNGSIGNATURE)
 	}
@@ -229,8 +229,8 @@ impl<R: Reader> PNGDecoder<R> {
 		self.state = HaveSignature;
 
 		loop {
-			let length = try!(self.inner.inner().r.read_be_u32());
-			let chunk = try!(self.inner.inner().r.read_exact(4));
+			let length = try!(self.z.inner().r.read_be_u32());
+			let chunk = try!(self.z.inner().r.read_exact(4));
 			
 			self.chunk_length = length;
 			self.chunk_type   = chunk.clone();
@@ -248,14 +248,14 @@ impl<R: Reader> PNGDecoder<R> {
 			match (s.as_slice(), self.state) {
 				("IHDR", HaveSignature) => {
 					assert!(length == 13);
-					let d = try!(self.inner.inner().r.read_exact(length as uint));
+					let d = try!(self.z.inner().r.read_exact(length as uint));
 
 					let _ = self.parse_IHDR(d);
 					self.state = HaveIHDR;
 				}
 
 				("PLTE", HaveIHDR) => {
-					let d = try!(self.inner.inner().r.read_exact(length as uint));
+					let d = try!(self.z.inner().r.read_exact(length as uint));
 
 					let _ = self.parse_PLTE(d);
 					self.state = HavePLTE;
@@ -268,27 +268,27 @@ impl<R: Reader> PNGDecoder<R> {
 				
 				("IDAT", HaveIHDR) if self.colour_type != 3 => {
 					self.state = HaveFirstIDat;
-					self.inner.inner().set_inital_length(self.chunk_length);	
-					self.inner.inner().crc.update(self.chunk_type.as_slice());
+					self.z.inner().set_inital_length(self.chunk_length);	
+					self.z.inner().crc.update(self.chunk_type.as_slice());
 
 					break;
 				}
 
 				("IDAT", HavePLTE) if self.colour_type == 3 => {
 					self.state = HaveFirstIDat;
-					self.inner.inner().set_inital_length(self.chunk_length);
-					self.inner.inner().crc.update(self.chunk_type.as_slice());
+					self.z.inner().set_inital_length(self.chunk_length);
+					self.z.inner().crc.update(self.chunk_type.as_slice());
 			
 					break;
 				}
 
 				_ => {
-					let b = try!(self.inner.inner().r.read_exact(length as uint));
+					let b = try!(self.z.inner().r.read_exact(length as uint));
 					self.crc.update(b);
 				}
 			}
 
-			let chunk_crc = try!(self.inner.inner().r.read_be_u32());
+			let chunk_crc = try!(self.z.inner().r.read_be_u32());
 			let crc = self.crc.checksum();
 
 			assert!(crc == chunk_crc);
@@ -411,7 +411,7 @@ impl<R: Reader> Reader for IDATReader<R> {
 				
 				let v = try!(self.r.read_exact(4));
 				self.crc.update(v.as_slice());
-				
+
 				match str::from_utf8(v.as_slice()) {
 					Some("IDAT") => (),
 					_ 			 => {
