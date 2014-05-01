@@ -48,7 +48,9 @@ fn main() {
 			let a = p.decode_image().unwrap();
 			let (b, c) = p.dimensions();
 			let d = p.color_type();
-
+			let _ = p.palette();
+			let _ = p.rowlength();
+			
 			(a, b, c, d)
 		}
 		_ => fail!("unimplemented")

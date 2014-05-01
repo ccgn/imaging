@@ -31,8 +31,6 @@ enum PNGError {
 	InvalidPLTE
 }
 
-//enum Filter {NOFILTER = 0, SUB = 1, Up = 2, Average = 3, PAETH = 4}
-
 static NOFILTER: u8 = 0;
 static SUB: u8 = 1;
 static UP: u8 = 2;
@@ -40,8 +38,6 @@ static AVERAGE: u8 = 3;
 static PAETH: u8 = 4;
 
 pub struct PNGDecoder<R> {
-	pub palette: Option<~[(u8, u8, u8)]>,
-
 	z: ZlibDecoder<IDATReader<R>>,	
 	crc: Crc32,
 	previous: ~[u8],
@@ -52,14 +48,14 @@ pub struct PNGDecoder<R> {
 	bit_depth: u8,
 	colour_type: u8,
 	pixel_type: colortype::ColorType,
+	palette: Option<~[(u8, u8, u8)]>,
 
-	compression_method: u8,
-	filter_method: u8,
 	interlace_method: u8,
 	
 	chunk_length: u32,
 	chunk_type: ~[u8],
 	bpp: uint,
+	rowlength: uint,
 }
 
 impl<R: Reader> PNGDecoder<R> {
@@ -78,13 +74,12 @@ impl<R: Reader> PNGDecoder<R> {
 			height: 0,
 			bit_depth: 0,
 			colour_type: 0,
-			compression_method: 0,
-			filter_method: 0,
 			interlace_method: 0,
 
 			chunk_length: 0,
 			chunk_type: ~[],
-			bpp: 0
+			bpp: 0,
+			rowlength: 0,
 		}
 	}
 
@@ -97,21 +92,27 @@ impl<R: Reader> PNGDecoder<R> {
 	}
 
 	pub fn read_scanline(&mut self, buf: &mut [u8]) -> IoResult<uint> {
+		assert!(buf.len() >= self.rowlength);
+
 		if self.state == Start {
 			let _ = try!(self.read_metadata());
 		}
 
 		let filter  = try!(self.z.read_byte());
-		let mut have = 0;	
-		
-		while have < buf.len() {
-			let r = try!(self.z.read(buf.mut_slice_from(have)));
-			have += r;
+		let _ = try!(self.z.fill(buf.mut_slice_to(self.rowlength)));
+				
+		unfilter(filter, self.bpp, self.previous, buf.mut_slice_to(self.rowlength));
+		slice::bytes::copy_memory(self.previous, buf.slice_to(self.rowlength));
+
+		if self.bit_depth < 8 {
+			//expand_bit_depth(buf, self.rowlength, self.bit_depth);	
+			fail!("unimplemented")
 		}
-		assert!(have == buf.len());
-		unfilter(filter, self.bpp, self.previous, buf);
-		
-		slice::bytes::copy_memory(self.previous, buf);
+
+		if self.palette.is_some() {
+			let s = (*self.palette.get_ref()).as_slice();
+			expand_palette(buf, s, self.rowlength);
+		}		
 
 		Ok(buf.len())
 	}
@@ -131,6 +132,17 @@ impl<R: Reader> PNGDecoder<R> {
 		}
 
 		Ok(buf)
+	}
+
+	pub fn palette<'a>(&'a self) -> &'a [(u8, u8, u8)] {
+		match self.palette {
+			Some(ref p) => p.as_slice(),
+			None        => &[]
+		}
+	} 
+
+	pub fn rowlength(&self) -> uint {
+		self.bpp * self.width as uint
 	}
 
 	fn read_signature(&mut self) -> IoResult<bool> {
@@ -161,10 +173,10 @@ impl<R: Reader> PNGDecoder<R> {
 			(0, 16) => colortype::Grey(16),
 			(2, 8)  => colortype::RGB(8),
 			(2, 16) => colortype::RGB(16),
-			(3, 1)  => colortype::Palette(1),
-			(3, 2)  => colortype::Palette(2),
-			(3, 4)  => colortype::Palette(4),
-			(3, 8)  => colortype::Palette(8),
+			(3, 1)  => colortype::RGB(8),
+			(3, 2)  => colortype::RGB(8),
+			(3, 4)  => colortype::RGB(8),
+			(3, 8)  => colortype::RGB(8),
 			(4, 8)  => colortype::GreyA(8),
 			(4, 16) => colortype::GreyA(16),
 			(6, 8)  => colortype::RGBA(8),
@@ -172,13 +184,13 @@ impl<R: Reader> PNGDecoder<R> {
 			(_, _)  => return Err(InvalidPixelValue)
 		};
 
-		self.compression_method = m.read_byte().unwrap();
-		if self.compression_method != 0 {
+		let compression_method = m.read_byte().unwrap();
+		if compression_method != 0 {
 			return Err(UnknownCompressionMethod)
 		}
 
-		self.filter_method = m.read_byte().unwrap();
-		if self.filter_method != 0 {
+		let filter_method = m.read_byte().unwrap();
+		if filter_method != 0 {
 			return Err(UnknownFilterMethod)
 		}
 
@@ -190,14 +202,16 @@ impl<R: Reader> PNGDecoder<R> {
 		let channels = match self.colour_type {
 			0 => 1,
 			2 => 3,
-			3 => 3,
+			3 => 1,
 			4 => 2,
 			6 => 4,
 			_ => fail!("unknown colour type")
 		};
 
-		self.bpp = ((channels * self.bit_depth + 7) / 8) as uint; 
+		self.bpp = ((channels * self.bit_depth + 7) / 8) as uint;
+		self.rowlength = self.width as uint * self.bpp; 
 		self.previous = slice::from_elem(self.bpp * self.width as uint, 0u8);
+		
 		Ok(())
 	}
 
@@ -265,8 +279,9 @@ impl<R: Reader> PNGDecoder<R> {
 
 				("PLTE", HaveIHDR) => {
 					let d = try!(self.z.inner().r.read_exact(length as uint));
-
 					let _ = self.parse_PLTE(d);
+					
+					self.bpp = 3;
 					self.state = HavePLTE;
 				}
 
@@ -306,6 +321,18 @@ impl<R: Reader> PNGDecoder<R> {
 		}
 
 		Ok(())
+	}
+}
+
+fn expand_palette(buf: &mut[u8], palette: &[(u8, u8, u8)], entries: uint) {
+	assert!(buf.len() == entries * 3);
+	let tmp = slice::from_fn(entries, |i| buf[i]);
+
+	for (chunk, &i) in buf.mut_chunks(3).zip(tmp.iter()) {
+		let (r, g, b) = palette[i];
+		chunk[0] = r;
+		chunk[1] = g;
+		chunk[2] = b;
 	}
 }
 
