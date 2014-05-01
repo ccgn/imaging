@@ -1,5 +1,6 @@
 extern crate collections;
 extern crate time;
+extern crate flate;
 
 use std::os;
 use std::io::File;
@@ -7,6 +8,7 @@ use std::io::MemReader;
 
 use jpeg::JPEGDecoder;
 use png::PNGDecoder;
+use png::PNGEncoder;
 use ppm::PPMEncoder;
 
 mod colortype;
@@ -57,7 +59,16 @@ fn main() {
 	println!("{:?}", c);
 	println!("{} bytes", out.len());
 	println!("decoded in {} ms", (after - now) / (1000 * 1000));
-	
+		
+	let now = time::precise_time_ns();
 	let fout = File::create(&Path::new(os::args()[1] + ".ppm")).unwrap();
 	let _ = PPMEncoder::new(fout).encode(out.as_slice(), w, h, c);
+	let after = time::precise_time_ns();
+	println!("encoded ppm in {} ms", (after - now) / (1000 * 1000));
+
+	let now = time::precise_time_ns();
+	let fout = File::create(&Path::new(os::args()[1] + ".png")).unwrap();
+	let _ = PNGEncoder::new(fout).encode(out.as_slice(), w, h, c);
+	let after = time::precise_time_ns();
+	println!("encoded png in {} ms", (after - now) / (1000 * 1000));
 }
