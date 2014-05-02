@@ -55,7 +55,7 @@ pub struct PNGDecoder<R> {
 	chunk_length: u32,
 	chunk_type: ~[u8],
 	bpp: uint,
-	rowlength: uint,
+	rlength: uint
 }
 
 impl<R: Reader> PNGDecoder<R> {
@@ -79,7 +79,7 @@ impl<R: Reader> PNGDecoder<R> {
 			chunk_length: 0,
 			chunk_type: ~[],
 			bpp: 0,
-			rowlength: 0,
+			rlength: 0,
 		}
 	}
 
@@ -91,27 +91,27 @@ impl<R: Reader> PNGDecoder<R> {
 		self.pixel_type
 	}
 
+	pub fn rowlen(&self) -> uint {
+		let bits = colortype::bits_per_pixel(self.pixel_type);
+		(bits * self.width as uint + 7) / 8
+	}
+
 	pub fn read_scanline(&mut self, buf: &mut [u8]) -> IoResult<uint> {
-		assert!(buf.len() >= self.rowlength);
+		assert!(buf.len() >= self.previous.len());
 
 		if self.state == Start {
 			let _ = try!(self.read_metadata());
 		}
 
 		let filter  = try!(self.z.read_byte());
-		let _ = try!(self.z.fill(buf.mut_slice_to(self.rowlength)));
+		let _ = try!(self.z.fill(buf.mut_slice_to(self.rlength)));
 				
-		unfilter(filter, self.bpp, self.previous, buf.mut_slice_to(self.rowlength));
-		slice::bytes::copy_memory(self.previous, buf.slice_to(self.rowlength));
-
-		if self.bit_depth < 8 {
-			//expand_bit_depth(buf, self.rowlength, self.bit_depth);	
-			fail!("unimplemented")
-		}
+		unfilter(filter, self.bpp, self.previous, buf.mut_slice_to(self.rlength));
+		slice::bytes::copy_memory(self.previous, buf.slice_to(self.rlength));
 
 		if self.palette.is_some() {
 			let s = (*self.palette.get_ref()).as_slice();
-			expand_palette(buf, s, self.rowlength);
+			expand_palette(buf, s, self.rlength);
 		}		
 
 		Ok(buf.len())
@@ -122,12 +122,10 @@ impl<R: Reader> PNGDecoder<R> {
 			let _ = try!(self.read_metadata());
 		}
 
-		let mut buf = slice::from_elem(self.width as uint * 
-									   self.height as uint * 
-									   self.bpp, 0u8);
+		let row = self.rowlen();
+		let mut buf = slice::from_elem(row * self.height as uint, 0u8);
 		
-		let r = self.width * self.bpp as u32;
-		for chunk in buf.mut_chunks(r as uint) {
+		for chunk in buf.mut_chunks(row) {
 			let _len = try!(self.read_scanline(chunk));
 		}
 
@@ -140,10 +138,6 @@ impl<R: Reader> PNGDecoder<R> {
 			None        => &[]
 		}
 	} 
-
-	pub fn rowlength(&self) -> uint {
-		self.bpp * self.width as uint
-	}
 
 	fn read_signature(&mut self) -> IoResult<bool> {
 		let png = try!(self.z.inner().r.read_exact(8)); 
@@ -208,9 +202,11 @@ impl<R: Reader> PNGDecoder<R> {
 			_ => fail!("unknown colour type")
 		};
 
-		self.bpp = ((channels * self.bit_depth + 7) / 8) as uint;
-		self.rowlength = self.width as uint * self.bpp; 
-		self.previous = slice::from_elem(self.bpp * self.width as uint, 0u8);
+		let bits_per_pixel = channels * self.bit_depth as uint;		
+		
+		self.rlength = (bits_per_pixel * self.width as uint + 7) / 8;
+		self.bpp = (bits_per_pixel + 7) / 8;
+		self.previous = slice::from_elem(self.rlength as uint, 0u8);
 		
 		Ok(())
 	}
@@ -280,8 +276,6 @@ impl<R: Reader> PNGDecoder<R> {
 				("PLTE", HaveIHDR) => {
 					let d = try!(self.z.inner().r.read_exact(length as uint));
 					let _ = self.parse_PLTE(d);
-					
-					self.bpp = 3;
 					self.state = HavePLTE;
 				}
 
@@ -377,7 +371,7 @@ fn unfilter(filter: u8, bpp: uint, previous: &[u8], current: &mut [u8]) {
 	}
 }
 
-fn abs(a: i32) -> i32 {
+fn abs(a: i16) -> i16 {
 	if a < 0 {
 		a * -1
 	} else {
@@ -386,9 +380,9 @@ fn abs(a: i32) -> i32 {
 }
 
 fn filter_paeth(a: u8, b: u8, c: u8) -> u8 {
-	let ia = a as i32;
-	let ib = b as i32;
-	let ic = c as i32;
+	let ia = a as i16;
+	let ib = b as i16;
+	let ic = c as i16;
 
 	let p = ia + ib - ic;
 	

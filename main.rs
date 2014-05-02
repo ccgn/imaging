@@ -49,7 +49,6 @@ fn main() {
 			let (b, c) = p.dimensions();
 			let d = p.color_type();
 			let _ = p.palette();
-			let _ = p.rowlength();
 			
 			(a, b, c, d)
 		}
