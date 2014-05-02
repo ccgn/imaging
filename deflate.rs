@@ -188,14 +188,14 @@ impl<R: Reader> Inflater<R> {
 	}
 
 	fn read_stored_block(&mut self) -> IoResult<()> {
-		for _ in range(0, self.block_length) {
+		while self.block_length > 0 {
 			let a = try!(self.h.receive(8));
 			
 			self.buf.push(a as u8);
 			self.h.consume(8);
+			self.block_length -= 1;
 		}
 
-		self.block_length = 0;
 		Ok(()) 
 	}
 
