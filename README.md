@@ -5,6 +5,7 @@ Learning Rust; Implementing image formats
 + Implement Pure rust deflate compression
 + Implement Basic jpeg encoder
 + Implement GIF Decoder
++ Some sort of error handling instead of failure
 
 #BUGS
 + idct is slow
