@@ -57,12 +57,6 @@ struct HuffTable {
 	valptr: ~[int]
 }
 
-#[deriving(Default, Clone)]
-struct QuantTable {
-	precision: u8,
-	elements: ~[u8]
-}
-
 #[deriving(Clone)]
 struct Component {
 	id: u8,
@@ -85,61 +79,64 @@ enum JPEGState {
 
 pub struct JPEGDecoder<R> {
 	r: R,
-	quant_tables: [QuantTable, ..4],
-	dc_huff_tables: [HuffTable, ..2],
-	ac_huff_tables: [HuffTable, ..2],
+	
+	qtables: [u8, ..64 * 4],
+	dctables: [HuffTable, ..2],
+	actables: [HuffTable, ..2],
 
-	state: JPEGState,
+	h: HuffDecoder,
+
 	height: u16,
 	width: u16,
-	mcu_row: ~[u8],
-	num_mcu: u16,
-	expected_rst: u8,
-	mcu_h: u8,
-	mcu_v: u8,
-	row_count: u8,
-	mcu: ~[i32],
-	mcu_restart_count: u16,
-	spectral_start: u8,
-	spectral_end: u8,
-	approx_high: u8,
-	approx_low: u8,
-	h: HuffDecoder,
+	
 	num_components: u8,
 	scan_components: ~[u8],
 	components: SmallIntMap<Component>,
+	
+	mcu_row: ~[u8],
+	mcu: ~[i32],
+	mcu_h: u8,
+	mcu_v: u8,
+
+	interval: u16,
+	mcucount: u16,
+	expected_rst: u8,	
+	
+	row_count: u8,
+	state: JPEGState,
 }
 
 impl<R: Reader>JPEGDecoder<R> {
 	pub fn new(r: R) -> JPEGDecoder<R> {
-		let q: QuantTable = Default::default();
 		let h: HuffTable  = Default::default();
 		
 		JPEGDecoder {
 			r: r,
+	
+			qtables: [0u8, ..64 * 4],
+			dctables: [h.clone(), h.clone()],
+			actables: [h.clone(), h.clone()],
+
 			h: HuffDecoder::new(),
-			state: Start,
+
 			height: 0,
 			width: 0,
-			mcu_restart_count: 0,
+			
 			num_components: 0,
-			num_mcu: 0,
-			mcu_row: ~[],
-			expected_rst: RST0,
-			mcu_h: 0,
-			mcu_v: 0,
-			row_count: 0,
-			mcu: ~[],
-			spectral_start: 0,
-			spectral_end: 0,
-			approx_high: 0,
-			approx_low: 0,
 			scan_components: ~[],
 			components: SmallIntMap::new(),
 			
-			quant_tables: [q.clone(), q.clone(), q.clone(), q.clone()],
-			dc_huff_tables: [h.clone(), h.clone()],
-			ac_huff_tables: [h.clone(), h.clone()],
+			mcu_row: ~[],
+			mcu: ~[],
+			mcu_h: 0,
+			mcu_v: 0,
+
+			interval: 0,
+			mcucount: 0,
+			expected_rst: RST0,	
+			
+			row_count: 0,
+			state: Start,
 		}
 	}
 
@@ -148,16 +145,17 @@ impl<R: Reader>JPEGDecoder<R> {
 	}
 
 	pub fn color_type(&self) -> colortype::ColorType {
-		if self.num_components == 1 {
-			colortype::Grey(8)
-		} else {
-			colortype::RGB(8)
-		}
+		if self.num_components == 1 {colortype::Grey(8)} 
+		else {colortype::RGB(8)}
+	}
+
+	pub fn rowlen(&self) -> uint {
+		self.width as uint * self.num_components as uint
 	}
 	
 	pub fn read_scanline(&mut self, buf: &mut [u8]) -> IoResult<uint> {
 		if self.state == Start {
-			let _ = try!(self.find_scan());
+			let _ = try!(self.read_metadata());
 		}
 
 		if self.row_count == 0 {
@@ -166,30 +164,25 @@ impl<R: Reader>JPEGDecoder<R> {
 		
 		let w = 8 * ((self.width as uint + 7) / 8);
 		let len = w * self.num_components as uint;
-		let s = self.mcu_row.slice(self.row_count as uint * len,
-								   self.row_count as uint * len + buf.len());
-		slice::bytes::copy_memory(buf, s);
 		
-		self.row_count += 1;
+		let slice = self.mcu_row.slice(self.row_count as uint * len,
+								       self.row_count as uint * len + buf.len());
 		
-		if self.row_count == self.mcu_v * 8 {
-			self.row_count = 0;
-		}
-		
+		slice::bytes::copy_memory(buf, slice);
+		self.row_count = (self.row_count + 1) % (self.mcu_v * 8);
+				
 		Ok(buf.len())
 	}
 
 	pub fn decode_image(&mut self) -> IoResult<~[u8]> {
 		if self.state == Start {
-			let _ = try!(self.find_scan());
+			let _ = try!(self.read_metadata());
 		}
 
-		let mut buf = slice::from_elem(self.width as uint * 
-									   self.height as uint * 
-									   self.num_components as uint, 0u8);
+		let row = self.rowlen();
+		let mut buf = slice::from_elem(row * self.height as uint, 0u8);
 		
-		let r = self.width * self.num_components as u16;
-		for chunk in buf.mut_chunks(r as uint) {
+		for chunk in buf.mut_chunks(row) {
 			let _len = try!(self.read_scanline(chunk));
 		}
 
@@ -229,32 +222,32 @@ impl<R: Reader>JPEGDecoder<R> {
 			self.components.insert(*id as uint, c); 
 		}
 		
-		self.mcu_restart_count += 1;
+		self.mcucount += 1;
 		self.read_restart()
 	}
 
 	fn decode_block(&mut self, i: uint, dc: u8, pred: i32, ac: u8, q: u8) -> IoResult<i32> {
 		let zz   = self.mcu.mut_slice(i * 64, i * 64 + 64);
-		let dc_t = &self.dc_huff_tables[dc];
-		let ac_t = &self.ac_huff_tables[ac];
-		let q_t  = &self.quant_tables[q];
 		
-		let t     = try!(self.h.decode_symbol(&mut self.r, dc_t));
-		let diff  = if t > 0 {
-			try!(self.h.receive(&mut self.r, t))
-		} else {
-			0
-		};
+		let dctable = &self.dctables[dc];
+		let actable = &self.actables[ac];
+		let qtable  = self.qtables.slice(64 * q as uint, 
+									 	 64 * q as uint + 64);
+		
+		let t     = try!(self.h.decode_symbol(&mut self.r, dctable));
+		let diff  = if t > 0 {try!(self.h.receive(&mut self.r, t))}
+					else {0};
+		
 		//Section F.2.1.3.1
 		let diff = extend(diff, t);
 		let dc_coeff = diff + pred;
 
-		zz[0] = dc_coeff * q_t.elements[0] as i32;
+		zz[0] = dc_coeff * qtable[0] as i32;
 
 		let mut k = 0;
 
 		while k < 63 {
-			let rs = try!(self.h.decode_symbol(&mut self.r, ac_t));
+			let rs = try!(self.h.decode_symbol(&mut self.r, actable));
 			
 			let ssss = rs & 0x0F;
 			let rrrr = rs >> 4;
@@ -270,7 +263,7 @@ impl<R: Reader>JPEGDecoder<R> {
 				
 				//Figure F.14
 				let t = try!(self.h.receive(&mut self.r, ssss));
-				zz[UNZIGZAG[k + 1]] = extend(t, ssss) * q_t.elements[k + 1] as i32;
+				zz[UNZIGZAG[k + 1]] = extend(t, ssss) * qtable[k + 1] as i32;
 				k += 1;
 			}
 		}
@@ -284,7 +277,7 @@ impl<R: Reader>JPEGDecoder<R> {
 		Ok(dc_coeff)
 	}
 	
-	fn find_scan(&mut self) -> IoResult<()> {
+	fn read_metadata(&mut self) -> IoResult<()> {
 		while self.state != HaveFirstScan {
 			let byte = try!(self.r.read_u8());
 
@@ -302,28 +295,19 @@ impl<R: Reader>JPEGDecoder<R> {
 					let _ = try!(self.read_frame_header());
 					self.state = HaveFirstFrame;
 				}
-				SOF2 => fail!("Progressive DCT unimplemented"),		
 				SOS => {
 					let _ = try!(self.read_scan_header());
 					self.state = HaveFirstScan;
 				}				
-				DNL => fail!("DNL not supported"),
 				DRI => try!(self.read_restart_interval()),
-				APP0 => {
-					let length = try!(self.r.read_be_u16());
-					let _ = try!(self.r.read_exact((length - 2) as uint));
-				}
-				0xE1..APPF => {
+				APP0 .. APPF | COM => {
 					let length = try!(self.r.read_be_u16());
 					let _ = try!(self.r.read_exact((length -2) as uint));
 				}
-				COM => {
-					let length = try!(self.r.read_be_u16());
-					let _ = try!(self.r.read_exact((length -2) as uint));
-				}
-				TEM => continue,
-				EOI => break,
-				a => fail!(format!("unknown marker {:X}\n", a))
+				TEM  => continue,
+				SOF2 => fail!("Progressive DCT unimplemented"),		
+				DNL  => fail!("DNL not supported"),
+				a    => fail!(format!("unexpected marker {:X}\n", a))
 			}
 		}
 		
@@ -335,6 +319,7 @@ impl<R: Reader>JPEGDecoder<R> {
 		
 		let sample_precision = try!(self.r.read_u8());
 		assert!(sample_precision == 8);
+		
 		self.height 		  = try!(self.r.read_be_u16());
 		self.width  		  = try!(self.r.read_be_u16());
 		self.num_components   = try!(self.r.read_u8());
@@ -351,7 +336,7 @@ impl<R: Reader>JPEGDecoder<R> {
 	}
 
 	fn read_frame_components(&mut self, n: u8) -> IoResult<()> {
-		let mut mcu_blocks = 0;
+		let mut blocks_per_mcu = 0;
 		for _ in range(0, n) {
 			let id = try!(self.r.read_u8());
 			let hv = try!(self.r.read_u8());
@@ -367,7 +352,7 @@ impl<R: Reader>JPEGDecoder<R> {
 				dc_pred: 0
 			};
 
-			mcu_blocks += (hv >> 4) * (hv & 0x0F);
+			blocks_per_mcu += (hv >> 4) * (hv & 0x0F);
 			self.components.insert(id as uint, c);
 		}
 		
@@ -384,12 +369,13 @@ impl<R: Reader>JPEGDecoder<R> {
 				c.h = 1;
 				c.v = 1;
 			}
-			mcu_blocks = 1;
+
+			blocks_per_mcu = 1;
 			self.mcu_h = 1;
 			self.mcu_v = 1;
 		}
 
-		self.mcu =  slice::from_elem(mcu_blocks as uint * 64, 0i32);
+		self.mcu =  slice::from_elem(blocks_per_mcu as uint * 64, 0i32);
 		let mcu_row_len  = self.mcu_v as uint * 8 * 8 * ((self.width as uint + 7) / 8) * n as uint;
 		self.mcu_row = slice::from_elem(mcu_row_len, 0u8);
 		
@@ -414,13 +400,13 @@ impl<R: Reader>JPEGDecoder<R> {
 			self.scan_components.push(id);
 		}
 
-		self.spectral_end   = try!(self.r.read_u8());
-		self.spectral_start = try!(self.r.read_u8());
+		let _spectral_end   = try!(self.r.read_u8());
+		let _spectral_start = try!(self.r.read_u8());
 		
 		let approx = try!(self.r.read_u8());
 		
-		self.approx_high = approx >> 4;
-		self.approx_low  = approx & 0x0F;  
+		let _approx_high = approx >> 4;
+		let _approx_low  = approx & 0x0F;  
 		
 		Ok(())
 	}
@@ -430,22 +416,18 @@ impl<R: Reader>JPEGDecoder<R> {
 		table_length -= 2;
 
 		while table_length > 0 {
-			let pq_tq = try!(self.r.read_u8());
-			let pq = pq_tq >> 4;
-			let tq = pq_tq & 0x0F;
+			let pqtq = try!(self.r.read_u8());
+			let pq = pqtq >> 4;
+			let tq = pqtq & 0x0F;
 
-			assert!(pq == 0 || pq == 1);
+			assert!(pq == 0);
 			assert!(tq <= 3);
 			
-			let size = 64 + 64 * pq as uint;
-			let elements = try!(self.r.read_exact(size));
-			
-			self.quant_tables[tq] = QuantTable {
-				precision: pq,
-				elements: elements
-			};
-						
-			table_length -= 1 + size as i32;
+			let slice = self.qtables.mut_slice(64 * tq as uint, 
+											   64 * tq as uint + 64);
+			let _ = try!(self.r.fill(slice));
+									
+			table_length -= 1 + 64;
 		}
 		
 		Ok(())
@@ -456,9 +438,9 @@ impl<R: Reader>JPEGDecoder<R> {
 		table_length -= 2;
 		
 		while table_length > 0 {
-			let tc_th = try!(self.r.read_u8());
-			let tc = tc_th >> 4;
-			let th = tc_th & 0x0F;
+			let tcth = try!(self.r.read_u8());
+			let tc = tcth >> 4;
+			let th = tcth & 0x0F;
 			
 			assert!(tc == 0 || tc == 1);
 
@@ -469,10 +451,10 @@ impl<R: Reader>JPEGDecoder<R> {
 			let huffval = try!(self.r.read_exact(mt as uint));
 
 			if tc == 0 {
-				self.dc_huff_tables[th] = derive_tables(bits, huffval);
+				self.dctables[th] = derive_tables(bits, huffval);
 			}
 			else {
-				self.ac_huff_tables[th] = derive_tables(bits, huffval);
+				self.actables[th] = derive_tables(bits, huffval);
 			}
 			
 			table_length -= 1 + len as u16 + mt as u16;
@@ -484,7 +466,7 @@ impl<R: Reader>JPEGDecoder<R> {
 
 	fn read_restart_interval(&mut self) -> IoResult<()> {
 		let _length = try!(self.r.read_be_u16());
-		self.num_mcu = try!(self.r.read_be_u16());
+		self.interval = try!(self.r.read_be_u16());
 
 		Ok(())
 	}
@@ -493,7 +475,10 @@ impl<R: Reader>JPEGDecoder<R> {
 		let w = (self.width + 7) / (self.mcu_h * 8) as u16;	
 		let h = (self.height + 7) / (self.mcu_v * 8) as u16;		
 		 		
-		if self.num_mcu != 0  && self.mcu_restart_count % self.num_mcu == 0 && self.mcu_restart_count < w * h {
+		if self.interval != 0  && 
+		   self.mcucount % self.interval == 0 && 
+		   self.mcucount < w * h {
+			
 			let rst = try!(self.find_restart_marker());
 			
 			if rst == self.expected_rst {
@@ -505,7 +490,7 @@ impl<R: Reader>JPEGDecoder<R> {
 				}
 			}
 			else {
-				fail!(format!("bad restart marker, expected {0:X} but got {1:X}", self.expected_rst, rst));
+				fail!(format!("expected marker {0:X} but got {1:X}", self.expected_rst, rst));
 			}
 		}
 
@@ -516,6 +501,7 @@ impl<R: Reader>JPEGDecoder<R> {
 		if self.h.marker != 0 {
 			let m = self.h.marker;
 			self.h.marker = 0;
+			
 			return Ok(m);
 		}
 		
