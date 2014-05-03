@@ -599,7 +599,7 @@ fn level_shift(a: &mut [i32]) {
 //slow
 fn slow_idct(s: &[i32]) -> ~[i32] {
 	let a = 1.0 / f32::sqrt(2 as f32);
-	let mut out = slice::from_elem(64, 0f32); 
+	let mut out = slice::from_elem(64, 0i32); 
 
 	for y in range(0, 8) {
 		for x in range(0, 8) {
@@ -619,11 +619,10 @@ fn slow_idct(s: &[i32]) -> ~[i32] {
 				}		
 			}
 
-			out[x + 8 * y] = sum / 4f32;
+			out[x + 8 * y] = f32::round(sum / 4f32) as i32;
 		}
 	}
-
-	slice::from_fn(64, |i| f32::round(out[i]) as i32)
+	out
 }
 
 //Section F.2.2.1
