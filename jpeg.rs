@@ -7,6 +7,7 @@ use std::default::Default;
 
 use collections::smallintmap::SmallIntMap;
 use colortype;
+
 //Markers
 //Baseline DCT
 static SOF0: u8 = 0xC0;
@@ -192,7 +193,6 @@ impl<R: Reader>JPEGDecoder<R> {
 	fn decode_mcu_row(&mut self) -> IoResult<()> {
 		let w 	  = 8 * ((self.width as uint + 7) / 8);
 		let bpp   = self.num_components as uint; 
-
 		for x0 in range_step(0, w * bpp, bpp * 8 * self.mcu_h as uint) {
 			let _ = try!(self.decode_mcu());
 			upsample_mcu(self.mcu_row, x0, w, bpp, self.mcu, self.mcu_h, self.mcu_v)
@@ -269,6 +269,7 @@ impl<R: Reader>JPEGDecoder<R> {
 		}
 
 		let a = slow_idct(zz);
+		
 		for (i, v) in a.move_iter().enumerate() {
 			zz[i] = v;
 		}
@@ -362,7 +363,7 @@ impl<R: Reader>JPEGDecoder<R> {
 
 		self.mcu_h = hmax;
 		self.mcu_v = vmax;
-
+		
 		//only 1 component no interleaving
 		if n == 1 {
 			for (_, c) in self.components.mut_iter() {
@@ -376,7 +377,9 @@ impl<R: Reader>JPEGDecoder<R> {
 		}
 
 		self.mcu =  slice::from_elem(blocks_per_mcu as uint * 64, 0i32);
-		let mcu_row_len  = self.mcu_v as uint * 8 * 8 * ((self.width as uint + 7) / 8) * n as uint;
+		let mcus_per_row =  f32::ceil(self.width as f32 / (8 * hmax) as f32) as uint;
+		let mcu_row_len = (hmax as uint * vmax as uint) * self.mcu.len() * mcus_per_row;
+
 		self.mcu_row = slice::from_elem(mcu_row_len, 0u8);
 		
 		Ok(())
@@ -548,7 +551,7 @@ fn upsample_mcu(out: &mut [u8], xoffset: uint, width: uint, bpp: uint, mcu: &[i3
 		let y_blocks = mcu.slice_to(y_blocks as uint * 64);
 		let cb = mcu.slice(y_blocks.len(), y_blocks.len() + 64);
 		let cr = mcu.slice_from(y_blocks.len() + cb.len());
-
+		
 		let mut k = 0;
 		for by in range(0, v as uint) {
 			let y0 = by * 8;

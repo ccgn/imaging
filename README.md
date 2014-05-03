@@ -9,5 +9,4 @@ Learning Rust; Implementing image formats
 
 ###BUGS
 + idct is slow
-+ JPEG decoder makes wrong assumptions about MCU size
 + Paletted images < 8 bits per pixel not handled properly
