@@ -7,6 +7,7 @@ use std::io::File;
 use std::io::MemReader;
 
 use jpeg::JPEGDecoder;
+use jpeg::JPEGEncoder;
 use png::PNGDecoder;
 use png::PNGEncoder;
 use ppm::PPMEncoder;
@@ -60,6 +61,12 @@ fn main() {
 	println!("{:?}", c);
 	println!("{} bytes", out.len());
 	println!("decoded in {} ms", (after - now) / (1000 * 1000));
+
+	let now = time::precise_time_ns();
+	let fout = File::create(&Path::new(os::args()[1] + ".jpg")).unwrap();
+	let _ = JPEGEncoder::new(fout).encode(out.as_slice(), w, h, c);
+	let after = time::precise_time_ns();
+	println!("encoded jpeg in {} ms", (after - now) / (1000 * 1000));
 		
 	let now = time::precise_time_ns();
 	let fout = File::create(&Path::new(os::args()[1] + ".ppm")).unwrap();
