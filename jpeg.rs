@@ -738,13 +738,9 @@ impl HuffDecoder {
 	}	
 }
 
-fn derive_tables(bits: ~[u8], huffval: ~[u8]) -> HuffTable {
+fn derive_codes_and_sizes(bits: &[u8]) -> (~[u8], ~[u16]) {
 	let mut huffsize = slice::from_elem(256, 0u8);
 	let mut huffcode = slice::from_elem(256, 0u16);
-	let mut mincode  = slice::from_elem(16, -1i);
-	let mut maxcode  = slice::from_elem(16, -1i);
-	let mut valptr   = slice::from_elem(16, -1i);
-	let mut lut 	 = slice::from_elem(256, (0u8, 17u8));
 	
 	let mut k = 0;
 	let mut j;
@@ -784,7 +780,18 @@ fn derive_tables(bits: ~[u8], huffval: ~[u8]) -> HuffTable {
 
 		size += diff
 	}
+
+	(huffsize, huffcode)
+}
+
+fn derive_tables(bits: ~[u8], huffval: ~[u8]) -> HuffTable {
+	let mut mincode  = slice::from_elem(16, -1i);
+	let mut maxcode  = slice::from_elem(16, -1i);
+	let mut valptr   = slice::from_elem(16, -1i);
+	let mut lut 	 = slice::from_elem(256, (0u8, 17u8));
 	
+	let (huffsize, huffcode) = derive_codes_and_sizes(bits);
+
 	//Annex F.2.2.3
 	//Figure F.15
 	let mut j = 0;
@@ -1359,48 +1366,8 @@ fn slow_fdct(s: &[u8, ..64]) -> ~[i32] {
 }
 
 fn build_huff_lut(bits: &[u8], huffval: &[u8]) -> ~[(u8, u16)] {
-	let mut huffsize = slice::from_elem(256, 0u8);
-	let mut huffcode = slice::from_elem(256, 0u16);
-	let mut lut 	 = slice::from_elem(255, (17u8, 0u16));
-	
-	let mut k = 0;
-	let mut j;
-	
-	//Annex C.2
-	//Figure C.1
-	//Generate table of individual code lengths
-	for i in range(0u, 16) {
-		j = 0;
-		while j < bits[i] { 
-			huffsize[k] = i as u8 + 1;
-			k += 1;
-			j += 1;		
-		}
-	}
-
-	huffsize[k] = 0;
-	
-	//Annex C.2
-	//Figure C.2
-	//Generate table of huffman codes
-	k = 0;
-	let mut code = 0u16;
-	let mut size = huffsize[0];
-
-	while huffsize[k] != 0 {
-		huffcode[k] = code;
-		code += 1;
-		k += 1;
-
-		if huffsize[k] == size {
-			continue
-		}
-
-		let diff = huffsize[k] - size;
-		code <<= diff as u16;
-
-		size += diff
-	}
+	let mut lut = slice::from_elem(256, (17u8, 0u16));
+	let (huffsize, huffcode) = derive_codes_and_sizes(bits);
 
 	for (i, &v) in huffval.iter().enumerate() {
 		lut[v as uint] = (huffsize[i as uint], huffcode[i as uint]); 
