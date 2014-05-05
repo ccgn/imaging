@@ -965,37 +965,20 @@ impl<W: Writer> JPEGEncoder<W> {
 	}
 
 	fn write_bits(&mut self, bits: u16, size: u8) -> IoResult<()> {
-		/*self.accumulator |= bits as u32 << (32 - self.nbits);
+		self.accumulator |= bits as u32 << (32 - (self.nbits + size));
 		self.nbits += size;
 
 		while self.nbits >= 8 {
-			let byte = self.accumulator & (0xFFFFFFFFu32 << 24);
+			let byte = (self.accumulator & (0xFFFFFFFFu32 << 24)) >> 24;
 			
-			let _ = try!(self.w.write_u8((byte >> 24) as u8));
+			let _ = try!(self.w.write_u8(byte as u8));
 			if byte == 0xFF {
 				let _ = try!(self.w.write_u8(0x00));
 			}
 			
 			self.nbits -= 8;
 			self.accumulator <<= 8;
-		}*/
-
-		let mut n = size + self.nbits;
-		let mut b = bits as u32 << (32 - n);
-		b |= self.accumulator;
-
-		while n >= 8 {
-			let byte = (b >> 24) as u8;
-			let _ = try!(self.w.write_u8(byte));
-			if byte == 0xFF {
-				let _ = try!(self.w.write_u8(0x00));
-			}
-			b <<= 8;
-			n -= 8;
 		}
-
-		self.nbits = n;
-		self.accumulator = b;
 
 		Ok(())
 	}
@@ -1069,7 +1052,7 @@ impl<W: Writer> JPEGEncoder<W> {
 				  c: colortype::ColorType) -> IoResult<()> {
 		
 		let tables = slice::append(~[], STD_LUMA_QTABLE);
-		let mut tables = slice::append(tables, STD_CHROMA_QTABLE);
+		let tables = slice::append(tables, STD_CHROMA_QTABLE);
 		
 		let components = [
 			Component {id: LUMAID, h: 1, v: 1, tq: LUMADESTINATION, dc_table: LUMADESTINATION, ac_table: LUMADESTINATION, dc_pred: 0},
