@@ -35,7 +35,7 @@ fn main() {
 
 	let now = time::precise_time_ns();
 	let (out, w, h, c) = match file.split('.').last() {
-		Some("jpg") => {
+		Some("jpg") | Some("jpeg") => {
 			let mut j = JPEGDecoder::new(m);
 
 			let a = j.decode_image().unwrap();
@@ -54,7 +54,7 @@ fn main() {
 
 			(a, b, c, d)
 		}
-		_ => fail!("unimplemented")
+		_ => fail!("unimplemented image extension")
 	};
 	let after = time::precise_time_ns();
 

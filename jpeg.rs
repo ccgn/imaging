@@ -1026,6 +1026,35 @@ impl<W: Writer> JPEGEncoder<W> {
 		Ok(dcval)
 	}
 
+	fn encode_Grey(&mut self, image: &[u8], width: uint, height: uint, bpp: uint) -> IoResult<()> {
+		let mut yblock     = [0u8, ..64];
+		let mut y_dcprev   = 0;
+		let mut dct_yblock = [0i32, ..64];
+
+		for y in range_step(0, height as uint, 8) {
+			for x in range_step(0, width as uint, 8) {
+				//RGB -> YCbCr
+				copy_blocks_Grey(image, x, y, width as uint, bpp, &mut yblock);
+
+				//Level shift and fdct
+				//Coeffs are scaled by 8
+				fast::fdct(yblock.as_slice(), dct_yblock);
+
+				//Quantization
+				for i in range(0, 64) {
+					dct_yblock[i]   = f32::round((dct_yblock[i] / 8)   as f32 / self.tables.slice_to(64)[i] as f32) as i32;
+				}
+
+				let la = self.luma_actable.to_owned();
+				let ld = self.luma_dctable.to_owned();
+
+				y_dcprev  = try!(self.write_block(dct_yblock, y_dcprev, ld, la));
+			}
+		}
+
+		Ok(())
+	}
+
 	fn encode_RGB(&mut self, image: &[u8], width: uint, height: uint, bpp: uint) -> IoResult<()> {
 		let mut y_dcprev = 0;
 		let mut cb_dcprev = 0;
@@ -1041,16 +1070,8 @@ impl<W: Writer> JPEGEncoder<W> {
 
 		for y in range_step(0, height as uint, 8) {
 			for x in range_step(0, width as uint, 8) {
-
-				copy_blocks_RGB(image, x, y, width as uint, bpp, &mut yblock, &mut cb_block, &mut cr_block);
-
 				//RGB -> YCbCr
-				for i in range(0, 64) {
-					let (y, cb, cr) = rgb_to_ycbcr(yblock[i], cb_block[i], cr_block[i]);
-					yblock[i] = y;
-					cb_block[i] = cb;
-					cr_block[i] = cr;
-				}
+				copy_blocks_YCbCr(image, x, y, width as uint, bpp, &mut yblock, &mut cb_block, &mut cr_block);
 
 				//Level shift and fdct
 				//Coeffs are scaled by 8
@@ -1085,17 +1106,24 @@ impl<W: Writer> JPEGEncoder<W> {
 				  height: u32,
 				  c: colortype::ColorType) -> IoResult<()> {
 
+		let n = colortype::num_components(c);
+		let num_components = if n == 1 || n == 2 {1}
+							 else {3};
+
 		let _ = try!(self.write_segment(SOI, None));
 
 		let buf = build_jfif_header();
 		let _   = try!(self.write_segment(APP0, Some(buf)));
 
-		let buf = build_frame_header(8, width as u16, height as u16, self.components);
+		let buf = build_frame_header(8, width as u16, height as u16, self.components.slice_to(num_components));
 		let _   = try!(self.write_segment(SOF0, Some(buf)));
 
 		assert!(self.tables.len() / 64 == 2);
+		let numtables = if num_components == 1 {1}
+						else {2};
+
 		let t = self.tables.clone();
-		for (i, table) in t.chunks(64).enumerate() {
+		for (i, table) in t.chunks(64).enumerate().take(numtables) {
 			let buf = build_quantization_segment(8, i as u8, table);
 			let _   = try!(self.write_segment(DQT, Some(buf)));
 		}
@@ -1105,30 +1133,34 @@ impl<W: Writer> JPEGEncoder<W> {
 		let buf = build_huffman_segment(DCCLASS, LUMADESTINATION, numcodes, values);
 		let _   = try!(self.write_segment(DHT, Some(buf)));
 
-		let numcodes = STD_CHROMA_DC_CODE_LENGTHS;
-		let values   = STD_CHROMA_DC_VALUES;
-		let buf = build_huffman_segment(DCCLASS, CHROMADESTINATION, numcodes, values);
-		let _   = try!(self.write_segment(DHT, Some(buf)));
-
 		let numcodes = STD_LUMA_AC_CODE_LENGTHS;
 		let values   = STD_LUMA_AC_VALUES;
 		let buf = build_huffman_segment(ACCLASS, LUMADESTINATION, numcodes, values);
 		let _   = try!(self.write_segment(DHT, Some(buf)));
 
-		let numcodes = STD_CHROMA_AC_CODE_LENGTHS;
-		let values   = STD_CHROMA_AC_VALUES;
-		let buf = build_huffman_segment(ACCLASS, CHROMADESTINATION, numcodes, values);
-		let _   = try!(self.write_segment(DHT, Some(buf)));
+		if num_components == 3 {
+			let numcodes = STD_CHROMA_DC_CODE_LENGTHS;
+			let values   = STD_CHROMA_DC_VALUES;
+			let buf = build_huffman_segment(DCCLASS, CHROMADESTINATION, numcodes, values);
+			let _   = try!(self.write_segment(DHT, Some(buf)));
 
-		let buf = build_scan_header(self.components);
+			let numcodes = STD_CHROMA_AC_CODE_LENGTHS;
+			let values   = STD_CHROMA_AC_VALUES;
+			let buf = build_huffman_segment(ACCLASS, CHROMADESTINATION, numcodes, values);
+			let _   = try!(self.write_segment(DHT, Some(buf)));
+		}
+
+		let buf = build_scan_header(self.components.slice_to(num_components));
 		let _   = try!(self.write_segment(SOS, Some(buf)));
 
 		assert!(width % 8 == 0);
 		assert!(height % 8 == 0);
 
 		match c {
-			colortype::RGB(8) => try!(self.encode_RGB(image, width as uint, height as uint, 3)),
-			colortype::RGBA(8) => try!(self.encode_RGB(image, width as uint, height as uint, 4)),
+			colortype::RGB(8)   => try!(self.encode_RGB(image, width as uint, height as uint, 3)),
+			colortype::RGBA(8)  => try!(self.encode_RGB(image, width as uint, height as uint, 4)),
+			colortype::Grey(8)  => try!(self.encode_Grey(image, width as uint, height as uint, 1)),
+			colortype::GreyA(8) => try!(self.encode_Grey(image, width as uint, height as uint, 2)),
 			_  => fail!("unimplemented!")
 		};
 
@@ -1267,21 +1299,28 @@ fn rgb_to_ycbcr(r: u8, g: u8, b: u8) -> (u8, u8, u8) {
 	(y as u8, cb as u8, cr as u8)
 }
 
-fn copy_blocks_RGB(source: &[u8],
+fn copy_blocks_YCbCr(source: &[u8],
 						 x0: uint,
 						 y0: uint,
 						 width: uint,
 						 bpp: uint,
-						 rb: &mut [u8, ..64],
-						 gb: &mut [u8, ..64],
-						 bb: &mut [u8, ..64]) {
+						 yb: &mut [u8, ..64],
+						 cbb: &mut [u8, ..64],
+						 crb: &mut [u8, ..64]) {
 	for y in range(0u, 8) {
 		let ystride = (y0 + y) * bpp * width;
 		for x in range(0u, 8) {
 			let xstride = x0 * bpp + x * bpp;
-			rb[y * 8 + x] = source[ystride + xstride + 0];
-			gb[y * 8 + x] = source[ystride + xstride + 1];
-			bb[y * 8 + x] = source[ystride + xstride + 2];
+
+			let r = source[ystride + xstride + 0];
+			let g = source[ystride + xstride + 1];
+			let b = source[ystride + xstride + 2];
+
+			let (yc, cb, cr) = rgb_to_ycbcr(r, g, b);
+
+			yb[y * 8 + x]  = yc;
+			cbb[y * 8 + x] = cb;
+			crb[y * 8 + x] = cr;
 		}
 	}
 }
