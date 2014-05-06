@@ -976,10 +976,14 @@ impl<W: Writer> JPEGEncoder<W> {
 
 	fn write_block(&mut self,
 				   block: &[i32],
+				   prevdc: i32,
 				   dctable: &[(u8, u16)],
-				   actable: &[(u8, u16)]) -> IoResult<()> {
+				   actable: &[(u8, u16)]) -> IoResult<i32> {
 
-		let (size, value) = encode_coefficient(block[0]);
+		//Differential DC encoding
+		let dcval = block[0];
+		let diff  = dcval - prevdc;
+		let (size, value) = encode_coefficient(diff);
 
 		let _ = try!(self.huffman_encode(size, dctable));
 		let _ = try!(self.write_bits(value, size));
@@ -1019,13 +1023,13 @@ impl<W: Writer> JPEGEncoder<W> {
 			}
 		}
 
-		Ok(())
+		Ok(dcval)
 	}
 
 	fn encode_RGB(&mut self, image: &[u8], width: uint, height: uint, bpp: uint) -> IoResult<()> {
-		let mut y_dcpred = 0;
-		let mut cb_dcpred = 0;
-		let mut cr_dcpred = 0;
+		let mut y_dcprev = 0;
+		let mut cb_dcprev = 0;
+		let mut cr_dcprev = 0;
 
 		let mut dct_yblock   = [0i32, ..64];
 		let mut dct_cb_block = [0i32, ..64];
@@ -1061,27 +1065,14 @@ impl<W: Writer> JPEGEncoder<W> {
 					dct_cr_block[i] = f32::round((dct_cr_block[i] / 8) as f32 / self.tables.slice_from(64)[i] as f32) as i32;
 				}
 
-				//Differential DC encoding
-				let y_diff  = dct_yblock[0] - y_dcpred;
-				let cb_diff = dct_cr_block[0] - cb_dcpred;
-				let cr_diff = dct_cb_block[0] - cr_dcpred;
-
-				y_dcpred  = dct_yblock[0];
-				cb_dcpred = dct_cb_block[0];
-				cr_dcpred = dct_cr_block[0];
-
-				dct_yblock[0]   = y_diff;
-				dct_cb_block[0] = cb_diff;
-				dct_cr_block[0] = cr_diff;
-
 				let la = self.luma_actable.to_owned();
 				let ld = self.luma_dctable.to_owned();
 				let cd = self.chroma_dctable.to_owned();
 				let ca = self.chroma_actable.to_owned();
 
-				let _ = try!(self.write_block(dct_yblock, ld, la));
-				let _ = try!(self.write_block(dct_cb_block, cd, ca));
-				let _ = try!(self.write_block(dct_cr_block, cd, ca));
+				y_dcprev  = try!(self.write_block(dct_yblock, y_dcprev, ld, la));
+				cb_dcprev = try!(self.write_block(dct_cb_block, cb_dcprev, cd, ca));
+				cr_dcprev = try!(self.write_block(dct_cr_block, cr_dcprev, cd, ca));
 			}
 		}
 
