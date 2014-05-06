@@ -98,7 +98,7 @@ pub struct JPEGDecoder<R> {
 	components: SmallIntMap<Component>,
 
 	mcu_row: ~[u8],
-	mcu: ~[i32],
+	mcu: ~[u8],
 	hmax: u8,
 	vmax: u8,
 
@@ -231,6 +231,7 @@ impl<R: Reader>JPEGDecoder<R> {
 
 	fn decode_block(&mut self, i: uint, dc: u8, pred: i32, ac: u8, q: u8) -> IoResult<i32> {
 		let zz   = self.mcu.mut_slice(i * 64, i * 64 + 64);
+		let mut tmp = [0i32, ..64];
 
 		let dctable = &self.dctables[dc];
 		let actable = &self.actables[ac];
@@ -245,7 +246,7 @@ impl<R: Reader>JPEGDecoder<R> {
 		let diff = extend(diff, t);
 		let dc_coeff = diff + pred;
 
-		zz[0] = dc_coeff * qtable[0] as i32;
+		tmp[0] = dc_coeff * qtable[0] as i32;
 
 		let mut k = 0;
 
@@ -266,17 +267,12 @@ impl<R: Reader>JPEGDecoder<R> {
 
 				//Figure F.14
 				let t = try!(self.h.receive(&mut self.r, ssss));
-				zz[UNZIGZAG[k + 1]] = extend(t, ssss) * qtable[k + 1] as i32;
+				tmp[UNZIGZAG[k + 1]] = extend(t, ssss) * qtable[k + 1] as i32;
 				k += 1;
 			}
 		}
 
-		let mut tmp = [0u8, ..64];
-		fast::idct(zz, tmp);
-
-		for i in range(0, 64) {
-			zz[i] = tmp[i] as i32
-		}
+		fast::idct(tmp, zz);
 
 		Ok(dc_coeff)
 	}
@@ -389,7 +385,7 @@ impl<R: Reader>JPEGDecoder<R> {
 			self.vmax = 1;
 		}
 
-		self.mcu =  slice::from_elem(blocks_per_mcu as uint * 64, 0i32);
+		self.mcu =  slice::from_elem(blocks_per_mcu as uint * 64, 0u8);
 		let mcus_per_row =  f32::ceil(self.width as f32 / (8 * hmax) as f32) as uint;
 		let mcu_row_len = (hmax as uint * vmax as uint) * self.mcu.len() * mcus_per_row;
 
@@ -550,7 +546,7 @@ impl<R: Reader>JPEGDecoder<R> {
 	}
 }
 
-fn upsample_mcu(out: &mut [u8], xoffset: uint, width: uint, bpp: uint, mcu: &[i32], h: u8, v: u8) {
+fn upsample_mcu(out: &mut [u8], xoffset: uint, width: uint, bpp: uint, mcu: &[u8], h: u8, v: u8) {
 	if mcu.len() == 64 {
 		for y in range(0u, 8) {
 			for x in range(0u, 8) {
@@ -1063,9 +1059,14 @@ impl<W: Writer> JPEGEncoder<W> {
 		let buf = build_scan_header(components);
 		let _   = try!(self.write_segment(SOS, Some(buf)));
 
-		assert!(c == colortype::RGB(8));
 		assert!(width % 8 == 0);
 		assert!(height % 8 == 0);
+
+		let bpp = match c {
+			colortype::RGB(8) => 3,
+			colortype::RGBA(8) => 4,
+			_  => fail!("unimplemented!")
+		};
 
 		let mut yblock = [0u8, ..64];
 		let mut cb_block = [0u8, ..64];
@@ -1077,7 +1078,7 @@ impl<W: Writer> JPEGEncoder<W> {
 
 		for y in range_step(0, height as uint, 8) {
 			for x in range_step(0, width as uint, 8) {
-				copy_component_blocks(image, x, y, width as uint, 3, &mut yblock, &mut cb_block, &mut cr_block);
+				copy_component_blocks(image, x, y, width as uint, bpp, &mut yblock, &mut cb_block, &mut cr_block);
 
 				//RGB -> YCbCr
 				for i in range(0, 64) {
