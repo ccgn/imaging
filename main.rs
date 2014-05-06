@@ -63,21 +63,36 @@ fn main() {
 	println!("{} bytes", out.len());
 	println!("decoded in {} ms", (after - now) / (1000 * 1000));
 
-	let now = time::precise_time_ns();
-	let fout = File::create(&Path::new(os::args()[1] + ".jpg")).unwrap();
-	let _ = JPEGEncoder::new(fout).encode(out.as_slice(), w, h, c);
-	let after = time::precise_time_ns();
-	println!("encoded jpeg in {} ms", (after - now) / (1000 * 1000));
+	let t = out.clone();
+	spawn(proc() {
+		let fout = File::create(&Path::new(os::args()[1] + ".jpg")).unwrap();
 
-	let now = time::precise_time_ns();
-	let fout = File::create(&Path::new(os::args()[1] + ".ppm")).unwrap();
-	let _ = PPMEncoder::new(fout).encode(out.as_slice(), w, h, c);
-	let after = time::precise_time_ns();
-	println!("encoded ppm in {} ms", (after - now) / (1000 * 1000));
+		let now = time::precise_time_ns();
+		let _ = JPEGEncoder::new(fout).encode(t.as_slice(), w, h, c);
+		let after = time::precise_time_ns();
 
-	let now = time::precise_time_ns();
-	let fout = File::create(&Path::new(os::args()[1] + ".png")).unwrap();
-	let _ = PNGEncoder::new(fout).encode(out.as_slice(), w, h, c);
-	let after = time::precise_time_ns();
-	println!("encoded png in {} ms", (after - now) / (1000 * 1000));
+		println!("encoded jpeg in {} ms", (after - now) / (1000 * 1000));
+	});
+
+	let t = out.clone();
+	spawn(proc() {
+		let fout = File::create(&Path::new(os::args()[1] + ".ppm")).unwrap();
+
+		let now = time::precise_time_ns();
+		let _ = PPMEncoder::new(fout).encode(t.as_slice(), w, h, c);
+		let after = time::precise_time_ns();
+
+		println!("encoded ppm in {} ms", (after - now) / (1000 * 1000));
+	});
+
+	let t = out.clone();
+	spawn(proc() {
+		let fout = File::create(&Path::new(os::args()[1] + ".png")).unwrap();
+
+		let now = time::precise_time_ns();
+		let _ = PNGEncoder::new(fout).encode(t.as_slice(), w, h, c);
+		let after = time::precise_time_ns();
+
+		println!("encoded png in {} ms", (after - now) / (1000 * 1000));
+	});
 }
