@@ -16,6 +16,7 @@ mod colortype;
 mod hash;
 mod deflate;
 mod zlib;
+mod dct;
 mod jpeg;
 mod png;
 mod ppm;
@@ -30,13 +31,13 @@ fn main() {
 	let mut fin = File::open(&Path::new(file.clone())).unwrap();
 	let buf = fin.read_to_end().unwrap();
 
-	let m = MemReader::new(buf);	
+	let m = MemReader::new(buf);
 
 	let now = time::precise_time_ns();
 	let (out, w, h, c) = match file.split('.').last() {
 		Some("jpg") => {
 			let mut j = JPEGDecoder::new(m);
-			
+
 			let a = j.decode_image().unwrap();
 			let (b, c) = j.dimensions();
 			let d = j.color_type();
@@ -45,12 +46,12 @@ fn main() {
 		}
 		Some("png") => {
 			let mut p = PNGDecoder::new(m);
-			
+
 			let a = p.decode_image().unwrap();
 			let (b, c) = p.dimensions();
 			let d = p.color_type();
 			let _ = p.palette();
-			
+
 			(a, b, c, d)
 		}
 		_ => fail!("unimplemented")
@@ -67,7 +68,7 @@ fn main() {
 	let _ = JPEGEncoder::new(fout).encode(out.as_slice(), w, h, c);
 	let after = time::precise_time_ns();
 	println!("encoded jpeg in {} ms", (after - now) / (1000 * 1000));
-		
+
 	let now = time::precise_time_ns();
 	let fout = File::create(&Path::new(os::args()[1] + ".ppm")).unwrap();
 	let _ = PPMEncoder::new(fout).encode(out.as_slice(), w, h, c);

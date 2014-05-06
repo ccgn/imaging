@@ -9,6 +9,8 @@ use std::default::Default;
 use collections::smallintmap::SmallIntMap;
 use colortype;
 
+use dct::fast;
+
 //Markers
 //Baseline DCT
 static SOF0: u8 = 0xC0;
@@ -81,7 +83,7 @@ enum JPEGState {
 
 pub struct JPEGDecoder<R> {
 	r: R,
-	
+
 	qtables: [u8, ..64 * 4],
 	dctables: [HuffTable, ..2],
 	actables: [HuffTable, ..2],
@@ -90,11 +92,11 @@ pub struct JPEGDecoder<R> {
 
 	height: u16,
 	width: u16,
-	
+
 	num_components: u8,
 	scan_components: ~[u8],
 	components: SmallIntMap<Component>,
-	
+
 	mcu_row: ~[u8],
 	mcu: ~[i32],
 	hmax: u8,
@@ -102,8 +104,8 @@ pub struct JPEGDecoder<R> {
 
 	interval: u16,
 	mcucount: u16,
-	expected_rst: u8,	
-	
+	expected_rst: u8,
+
 	row_count: u8,
 	state: JPEGState,
 }
@@ -111,10 +113,10 @@ pub struct JPEGDecoder<R> {
 impl<R: Reader>JPEGDecoder<R> {
 	pub fn new(r: R) -> JPEGDecoder<R> {
 		let h: HuffTable  = Default::default();
-		
+
 		JPEGDecoder {
 			r: r,
-	
+
 			qtables: [0u8, ..64 * 4],
 			dctables: [h.clone(), h.clone()],
 			actables: [h.clone(), h.clone()],
@@ -123,11 +125,11 @@ impl<R: Reader>JPEGDecoder<R> {
 
 			height: 0,
 			width: 0,
-			
+
 			num_components: 0,
 			scan_components: ~[],
 			components: SmallIntMap::new(),
-			
+
 			mcu_row: ~[],
 			mcu: ~[],
 			hmax: 0,
@@ -135,8 +137,8 @@ impl<R: Reader>JPEGDecoder<R> {
 
 			interval: 0,
 			mcucount: 0,
-			expected_rst: RST0,	
-			
+			expected_rst: RST0,
+
 			row_count: 0,
 			state: Start,
 		}
@@ -147,14 +149,14 @@ impl<R: Reader>JPEGDecoder<R> {
 	}
 
 	pub fn color_type(&self) -> colortype::ColorType {
-		if self.num_components == 1 {colortype::Grey(8)} 
+		if self.num_components == 1 {colortype::Grey(8)}
 		else {colortype::RGB(8)}
 	}
 
 	pub fn rowlen(&self) -> uint {
 		self.width as uint * self.num_components as uint
 	}
-	
+
 	pub fn read_scanline(&mut self, buf: &mut [u8]) -> IoResult<uint> {
 		if self.state == Start {
 			let _ = try!(self.read_metadata());
@@ -163,16 +165,16 @@ impl<R: Reader>JPEGDecoder<R> {
 		if self.row_count == 0 {
 			let _ = try!(self.decode_mcu_row());
 		}
-		
+
 		let w = 8 * ((self.width as uint + 7) / 8);
 		let len = w * self.num_components as uint;
-		
+
 		let slice = self.mcu_row.slice(self.row_count as uint * len,
 								       self.row_count as uint * len + buf.len());
-		
+
 		slice::bytes::copy_memory(buf, slice);
 		self.row_count = (self.row_count + 1) % (self.vmax * 8);
-				
+
 		Ok(buf.len())
 	}
 
@@ -183,7 +185,7 @@ impl<R: Reader>JPEGDecoder<R> {
 
 		let row = self.rowlen();
 		let mut buf = slice::from_elem(row * self.height as uint, 0u8);
-		
+
 		for chunk in buf.mut_chunks(row) {
 			let _len = try!(self.read_scanline(chunk));
 		}
@@ -193,7 +195,7 @@ impl<R: Reader>JPEGDecoder<R> {
 
 	fn decode_mcu_row(&mut self) -> IoResult<()> {
 		let w 	  = 8 * ((self.width as uint + 7) / 8);
-		let bpp   = self.num_components as uint; 
+		let bpp   = self.num_components as uint;
 		for x0 in range_step(0, w * bpp, bpp * 8 * self.hmax as uint) {
 			let _ = try!(self.decode_mcu());
 			upsample_mcu(self.mcu_row, x0, w, bpp, self.mcu, self.hmax, self.vmax)
@@ -216,29 +218,29 @@ impl<R: Reader>JPEGDecoder<R> {
 			for _ in range(0, c.h * c.v) {
 				let pred  = try!(self.decode_block(i, c.dc_table, c.dc_pred, c.ac_table, c.tq));
 				c.dc_pred = pred;
-				
+
 				i += 1;
 			}
 
-			self.components.insert(*id as uint, c); 
+			self.components.insert(*id as uint, c);
 		}
-		
+
 		self.mcucount += 1;
 		self.read_restart()
 	}
 
 	fn decode_block(&mut self, i: uint, dc: u8, pred: i32, ac: u8, q: u8) -> IoResult<i32> {
 		let zz   = self.mcu.mut_slice(i * 64, i * 64 + 64);
-		
+
 		let dctable = &self.dctables[dc];
 		let actable = &self.actables[ac];
-		let qtable  = self.qtables.slice(64 * q as uint, 
+		let qtable  = self.qtables.slice(64 * q as uint,
 									 	 64 * q as uint + 64);
-		
+
 		let t     = try!(self.h.decode_symbol(&mut self.r, dctable));
 		let diff  = if t > 0 {try!(self.h.receive(&mut self.r, t))}
 					else {0};
-		
+
 		//Section F.2.1.3.1
 		let diff = extend(diff, t);
 		let dc_coeff = diff + pred;
@@ -249,10 +251,10 @@ impl<R: Reader>JPEGDecoder<R> {
 
 		while k < 63 {
 			let rs = try!(self.h.decode_symbol(&mut self.r, actable));
-			
+
 			let ssss = rs & 0x0F;
 			let rrrr = rs >> 4;
-			
+
 			if ssss == 0 {
 				if rrrr != 15 {
 					break
@@ -261,7 +263,7 @@ impl<R: Reader>JPEGDecoder<R> {
 			}
 			else {
 				k += rrrr;
-				
+
 				//Figure F.14
 				let t = try!(self.h.receive(&mut self.r, ssss));
 				zz[UNZIGZAG[k + 1]] = extend(t, ssss) * qtable[k + 1] as i32;
@@ -269,16 +271,16 @@ impl<R: Reader>JPEGDecoder<R> {
 			}
 		}
 
-		let a = slow_idct(zz);
-		
-		for (i, v) in a.move_iter().enumerate() {
-			zz[i] = v;
+		let mut tmp = [0u8, ..64];
+		fast::idct(zz, tmp);
+
+		for i in range(0, 64) {
+			zz[i] = tmp[i] as i32
 		}
-		level_shift(zz);
-		
+
 		Ok(dc_coeff)
 	}
-	
+
 	fn read_metadata(&mut self) -> IoResult<()> {
 		while self.state != HaveFirstScan {
 			let byte = try!(self.r.read_u8());
@@ -291,47 +293,47 @@ impl<R: Reader>JPEGDecoder<R> {
 
 			match marker {
 				SOI => self.state = HaveSOI,
-				
+
 				DHT => try!(self.read_huffman_tables()),
-				
+
 				DQT => try!(self.read_quantization_tables()),
-				
+
 				SOF0 => {
 					let _ = try!(self.read_frame_header());
 					self.state = HaveFirstFrame;
 				}
-				
+
 				SOS => {
 					let _ = try!(self.read_scan_header());
 					self.state = HaveFirstScan;
-				}				
-				
+				}
+
 				DRI => try!(self.read_restart_interval()),
-				
+
 				APP0 .. APPF | COM => {
 					let length = try!(self.r.read_be_u16());
 					let _ = try!(self.r.read_exact((length -2) as uint));
 				}
-				
+
 				TEM  => continue,
-				
-				SOF2 => fail!("Progressive DCT unimplemented"),		
-				
+
+				SOF2 => fail!("Progressive DCT unimplemented"),
+
 				DNL  => fail!("DNL not supported"),
-				
+
 				a    => fail!(format!("unexpected marker {:X}\n", a))
 			}
 		}
-		
+
 		Ok(())
 	}
 
 	fn read_frame_header(&mut self) -> IoResult<()> {
 		let _frame_length = try!(self.r.read_be_u16());
-		
+
 		let sample_precision = try!(self.r.read_u8());
 		assert!(sample_precision == 8);
-		
+
 		self.height 		  = try!(self.r.read_be_u16());
 		self.width  		  = try!(self.r.read_be_u16());
 		self.num_components   = try!(self.r.read_u8());
@@ -353,7 +355,7 @@ impl<R: Reader>JPEGDecoder<R> {
 			let id = try!(self.r.read_u8());
 			let hv = try!(self.r.read_u8());
 			let tq = try!(self.r.read_u8());
-		
+
 			let c = Component {
 				id: id,
 				h:  hv >> 4,
@@ -367,14 +369,14 @@ impl<R: Reader>JPEGDecoder<R> {
 			blocks_per_mcu += (hv >> 4) * (hv & 0x0F);
 			self.components.insert(id as uint, c);
 		}
-		
+
 		let (hmax, vmax) = self.components.iter().fold((0, 0), |(h, v), (_, c)| {
 			(cmp::max(h, c.h), cmp::max(v, c.v))
 		});
 
 		self.hmax = hmax;
 		self.vmax = vmax;
-		
+
 		//only 1 component no interleaving
 		if n == 1 {
 			for (_, c) in self.components.mut_iter() {
@@ -392,7 +394,7 @@ impl<R: Reader>JPEGDecoder<R> {
 		let mcu_row_len = (hmax as uint * vmax as uint) * self.mcu.len() * mcus_per_row;
 
 		self.mcu_row = slice::from_elem(mcu_row_len, 0u8);
-		
+
 		Ok(())
 	}
 
@@ -410,18 +412,18 @@ impl<R: Reader>JPEGDecoder<R> {
 
 			c.dc_table = tables >> 4;
 			c.ac_table = tables & 0x0F;
-		
+
 			self.scan_components.push(id);
 		}
 
 		let _spectral_end   = try!(self.r.read_u8());
 		let _spectral_start = try!(self.r.read_u8());
-		
+
 		let approx = try!(self.r.read_u8());
-		
+
 		let _approx_high = approx >> 4;
-		let _approx_low  = approx & 0x0F;  
-		
+		let _approx_low  = approx & 0x0F;
+
 		Ok(())
 	}
 
@@ -436,32 +438,32 @@ impl<R: Reader>JPEGDecoder<R> {
 
 			assert!(pq == 0);
 			assert!(tq <= 3);
-			
-			let slice = self.qtables.mut_slice(64 * tq as uint, 
+
+			let slice = self.qtables.mut_slice(64 * tq as uint,
 											   64 * tq as uint + 64);
 			let _ = try!(self.r.fill(slice));
-									
+
 			table_length -= 1 + 64;
 		}
-		
+
 		Ok(())
 	}
 
 	fn read_huffman_tables(&mut self) -> IoResult<()> {
 		let mut table_length = try!(self.r.read_be_u16());
 		table_length -= 2;
-		
+
 		while table_length > 0 {
 			let tcth = try!(self.r.read_u8());
 			let tc = tcth >> 4;
 			let th = tcth & 0x0F;
-			
+
 			assert!(tc == 0 || tc == 1);
 
 			let bits = try!(self.r.read_exact(16));
 			let len = bits.len();
 
-			let mt = bits.iter().fold(0, |a, b| a + *b);			
+			let mt = bits.iter().fold(0, |a, b| a + *b);
 			let huffval = try!(self.r.read_exact(mt as uint));
 
 			if tc == 0 {
@@ -470,7 +472,7 @@ impl<R: Reader>JPEGDecoder<R> {
 			else {
 				self.actables[th] = derive_tables(bits, huffval);
 			}
-			
+
 			table_length -= 1 + len as u16 + mt as u16;
 		}
 
@@ -486,15 +488,15 @@ impl<R: Reader>JPEGDecoder<R> {
 	}
 
 	fn read_restart(&mut self) -> IoResult<()> {
-		let w = (self.width + 7) / (self.hmax * 8) as u16;	
-		let h = (self.height + 7) / (self.vmax * 8) as u16;		
-		 		
-		if self.interval != 0  && 
-		   self.mcucount % self.interval == 0 && 
+		let w = (self.width + 7) / (self.hmax * 8) as u16;
+		let h = (self.height + 7) / (self.vmax * 8) as u16;
+
+		if self.interval != 0  &&
+		   self.mcucount % self.interval == 0 &&
 		   self.mcucount < w * h {
-			
+
 			let rst = try!(self.find_restart_marker());
-			
+
 			if rst == self.expected_rst {
 				self.reset();
 				self.expected_rst += 1;
@@ -515,10 +517,10 @@ impl<R: Reader>JPEGDecoder<R> {
 		if self.h.marker != 0 {
 			let m = self.h.marker;
 			self.h.marker = 0;
-			
+
 			return Ok(m);
 		}
-		
+
 		let mut b;
 		loop {
 			b = try!(self.r.read_u8());
@@ -543,8 +545,8 @@ impl<R: Reader>JPEGDecoder<R> {
 		self.h.marker = 0;
 
 		for (_, c) in self.components.mut_iter() {
-			c.dc_pred = 0;		
-		}		
+			c.dc_pred = 0;
+		}
 	}
 }
 
@@ -554,7 +556,7 @@ fn upsample_mcu(out: &mut [u8], xoffset: uint, width: uint, bpp: uint, mcu: &[i3
 			for x in range(0u, 8) {
 				out[xoffset + x + (y * width)] = mcu[x + y * 8] as u8
 			}
-		} 
+		}
 	}
 	else {
 		let y_blocks = h * v;
@@ -562,7 +564,7 @@ fn upsample_mcu(out: &mut [u8], xoffset: uint, width: uint, bpp: uint, mcu: &[i3
 		let y_blocks = mcu.slice_to(y_blocks as uint * 64);
 		let cb = mcu.slice(y_blocks.len(), y_blocks.len() + 64);
 		let cr = mcu.slice_from(y_blocks.len() + cb.len());
-		
+
 		let mut k = 0;
 		for by in range(0, v as uint) {
 			let y0 = by * 8;
@@ -574,13 +576,13 @@ fn upsample_mcu(out: &mut [u8], xoffset: uint, width: uint, bpp: uint, mcu: &[i3
 					for x in range(0u, 8) {
 						let (a, b, c) = (y_blocks[k * 64 + x + y * 8], cb[x + y * 8], cr[x + y * 8]);
 						let (r, g, b) = ycbcr_to_rgb(a as f32, b as f32, c as f32);
-						
+
 						let offset = (y0 + y) * (width * bpp) + x0 + x * bpp;
 						out[offset + 0] = r;
 						out[offset + 1] = g;
-						out[offset + 2] = b; 
+						out[offset + 2] = b;
 					}
-				}		
+				}
 
 				k += 1;
 			}
@@ -594,49 +596,6 @@ fn ycbcr_to_rgb(y: f32, cb: f32, cr: f32) -> (u8, u8, u8) {
 	let b = y + 1.772f32 * (cb - 128f32);
 
 	(r as u8, g as u8, b as u8)
-}
-
-fn level_shift(a: &mut [i32]) {
-	for i in a.mut_iter() {
-		if *i < -128 {
-			*i = 0
-		}
-		else if *i > 127 {
-			*i = 255
-		}
-		else {
-			*i = *i + 128
-		}
-	}
-}
-
-//slow
-fn slow_idct(s: &[i32]) -> ~[i32] {
-	let a = 1.0 / f32::sqrt(2 as f32);
-	let mut out = slice::from_elem(64, 0i32); 
-
-	for y in range(0, 8) {
-		for x in range(0, 8) {
-			let mut sum = 0f32;
-
-			for u in range(0, 8) {
-				for v in range(0, 8) {
-					let cu = if u == 0 {a} else {1f32};
-					let cv = if v == 0 {a} else {1f32};
-					
-					let svu = s[v + 8 * u] as f32;
-					
-					let i = f32::cos(((2 * x + 1) as f32 * v as f32 * f32::consts::PI) / 16f32);
-					let j = f32::cos(((2 * y + 1) as f32 * u as f32 * f32::consts::PI) / 16f32);
-					
-					sum += cu * cv * svu * i * j;
-				}		
-			}
-
-			out[x + 8 * y] = f32::round(sum / 4f32) as i32;
-		}
-	}
-	out
 }
 
 //Section F.2.2.1
@@ -664,7 +623,7 @@ impl HuffDecoder {
 	pub fn new() -> HuffDecoder {
 		HuffDecoder {bits: 0, num_bits: 0, end: false, marker: 0}
 	}
-	
+
 	fn guarantee<R: Reader>(&mut self, r: &mut R, n: u8) -> IoResult<()> {
 		while self.num_bits < n && !self.end {
 			let byte = try!(r.read_u8());
@@ -676,11 +635,11 @@ impl HuffDecoder {
 					self.end = true;
 				}
 			}
-			
+
 			self.bits |= (byte as u32 << (32 - 8)) >> self.num_bits as u32;
 			self.num_bits += 8;
 		}
-		
+
 		Ok(())
 	}
 
@@ -691,16 +650,16 @@ impl HuffDecoder {
 		self.consume(1);
 
 		Ok(bit as u8)
-	}	
-	
+	}
+
 	//Section F.2.2.4
 	//Figure F.17
 	pub fn receive<R: Reader>(&mut self, r: &mut R, ssss: u8) -> IoResult<i32> {
 		let _ = try!(self.guarantee(r, ssss));
-		
+
 		let bits = (self.bits & (0xFFFFFFFFu32 << (32 - ssss as u32))) >> (32 - ssss);
 		self.consume(ssss);
-		
+
 		Ok(bits as i32)
 	}
 
@@ -714,51 +673,51 @@ impl HuffDecoder {
 		let index = (self.bits & 0xFF000000) >> (32 - 8);
 		let (val, size) = table.lut[index];
 
-		if index < 256 && size < 9 {			
+		if index < 256 && size < 9 {
 			self.consume(size);
-				
+
 			return Ok(val)
 		}
 		else {
 			let mut code = 0u;
-				
+
 			for i in range(0, 16) {
 				let b = try!(self.read_bit(r));
 				code |= b as uint;
 
 				if (code as int) <= table.maxcode[i] {
 					let index = table.valptr[i] + code as int - table.mincode[i];
-					return Ok(table.huffval[index])	
+					return Ok(table.huffval[index])
 				}
 				code <<= 1;
 			}
 
 			fail!(format!("bad huffman code: {:t}", code));
 		}
-	}	
+	}
 }
 
 fn derive_codes_and_sizes(bits: &[u8]) -> (~[u8], ~[u16]) {
 	let mut huffsize = slice::from_elem(256, 0u8);
 	let mut huffcode = slice::from_elem(256, 0u16);
-	
+
 	let mut k = 0;
 	let mut j;
-	
+
 	//Annex C.2
 	//Figure C.1
 	//Generate table of individual code lengths
 	for i in range(0u, 16) {
 		j = 0;
-		while j < bits[i] { 
+		while j < bits[i] {
 			huffsize[k] = i as u8 + 1;
 			k += 1;
-			j += 1;		
+			j += 1;
 		}
 	}
 
 	huffsize[k] = 0;
-	
+
 	//Annex C.2
 	//Figure C.2
 	//Generate table of huffman codes
@@ -789,13 +748,13 @@ fn derive_tables(bits: ~[u8], huffval: ~[u8]) -> HuffTable {
 	let mut maxcode  = slice::from_elem(16, -1i);
 	let mut valptr   = slice::from_elem(16, -1i);
 	let mut lut 	 = slice::from_elem(256, (0u8, 17u8));
-	
+
 	let (huffsize, huffcode) = derive_codes_and_sizes(bits);
 
 	//Annex F.2.2.3
 	//Figure F.15
 	let mut j = 0;
-	
+
 	for i in range(0u, 16) {
 		if bits[i] != 0 {
 			valptr[i] = j;
@@ -805,14 +764,14 @@ fn derive_tables(bits: ~[u8], huffval: ~[u8]) -> HuffTable {
 			j += 1;
 		}
 	}
-	
+
 	for (i, v) in huffval.iter().enumerate() {
 		if huffsize[i] > 8 {
 			break
 		}
-		
+
 		let r = 8 - huffsize[i] as uint;
-		
+
 		for j in range(0, 1 << r) {
 			let index = (huffcode[i] << r) + j as u16;
 			lut[index as uint] = (*v, huffsize[i]);
@@ -821,7 +780,7 @@ fn derive_tables(bits: ~[u8], huffval: ~[u8]) -> HuffTable {
 
 	HuffTable {
 		lut: lut,
-		huffval: huffval,		
+		huffval: huffval,
 		maxcode: maxcode,
 		mincode: mincode,
 		valptr: valptr
@@ -856,29 +815,29 @@ static STD_CHROMA_QTABLE: [u8, ..64] = [
 //section K.3
 //Code lengths and values for table K.3
 static STD_LUMA_DC_CODE_LENGTHS: [u8, ..16] = [
-	0x00, 0x01, 0x05, 0x01, 0x01, 0x01, 0x01, 0x01, 
+	0x00, 0x01, 0x05, 0x01, 0x01, 0x01, 0x01, 0x01,
 	0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 ];
 
 static STD_LUMA_DC_VALUES: [u8, ..12] = [
-	0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 
+	0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
 	0x08, 0x09, 0x0A, 0x0B
 ];
 
 //Code lengths and values for table K.4
 static STD_CHROMA_DC_CODE_LENGTHS: [u8, ..16] = [
-	0x00, 0x03, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 
+	0x00, 0x03, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
 	0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00
 ];
 
 static STD_CHROMA_DC_VALUES: [u8, ..12] = [
-	0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 
+	0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
 	0x08, 0x09, 0x0A, 0x0B
 ];
 
 //Code lengths and values for table k.5
 static STD_LUMA_AC_CODE_LENGTHS: [u8, ..16] = [
-	0x00, 0x02, 0x01, 0x03, 0x03, 0x02, 0x04, 0x03, 
+	0x00, 0x02, 0x01, 0x03, 0x03, 0x02, 0x04, 0x03,
 	0x05, 0x05, 0x04, 0x04, 0x00, 0x00, 0x01, 0x7D
 ];
 
@@ -898,20 +857,20 @@ static STD_LUMA_AC_VALUES: [u8, ..162] = [
 
 //Code lengths and values for table k.6
 static STD_CHROMA_AC_CODE_LENGTHS: [u8, ..16] = [
-	0x00, 0x02, 0x01, 0x02, 0x04, 0x04, 0x03, 0x04, 
+	0x00, 0x02, 0x01, 0x02, 0x04, 0x04, 0x03, 0x04,
 	0x07, 0x05, 0x04, 0x04, 0x00, 0x01, 0x02, 0x77,
 ];
 static STD_CHROMA_AC_VALUES: [u8, ..162] = [
-	0x00, 0x01, 0x02, 0x03, 0x11, 0x04, 0x05, 0x21, 0x31, 0x06, 0x12, 0x41, 0x51, 0x07, 0x61, 0x71, 
-	0x13, 0x22, 0x32, 0x81, 0x08, 0x14, 0x42, 0x91, 0xA1, 0xB1, 0xC1, 0x09, 0x23, 0x33, 0x52, 0xF0, 
-	0x15, 0x62, 0x72, 0xD1, 0x0A, 0x16, 0x24, 0x34, 0xE1, 0x25, 0xF1, 0x17, 0x18, 0x19, 0x1A, 0x26, 
-	0x27, 0x28, 0x29, 0x2A, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 
-	0x49, 0x4A, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5A, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 
-	0x69, 0x6A, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7A, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 
-	0x88, 0x89, 0x8A, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9A, 0xA2, 0xA3, 0xA4, 0xA5, 
-	0xA6, 0xA7, 0xA8, 0xA9, 0xAA, 0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7, 0xB8, 0xB9, 0xBA, 0xC2, 0xC3, 
-	0xC4, 0xC5, 0xC6, 0xC7, 0xC8, 0xC9, 0xCA, 0xD2, 0xD3, 0xD4, 0xD5, 0xD6, 0xD7, 0xD8, 0xD9, 0xDA, 
-	0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE7, 0xE8, 0xE9, 0xEA, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7, 0xF8, 
+	0x00, 0x01, 0x02, 0x03, 0x11, 0x04, 0x05, 0x21, 0x31, 0x06, 0x12, 0x41, 0x51, 0x07, 0x61, 0x71,
+	0x13, 0x22, 0x32, 0x81, 0x08, 0x14, 0x42, 0x91, 0xA1, 0xB1, 0xC1, 0x09, 0x23, 0x33, 0x52, 0xF0,
+	0x15, 0x62, 0x72, 0xD1, 0x0A, 0x16, 0x24, 0x34, 0xE1, 0x25, 0xF1, 0x17, 0x18, 0x19, 0x1A, 0x26,
+	0x27, 0x28, 0x29, 0x2A, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48,
+	0x49, 0x4A, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5A, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68,
+	0x69, 0x6A, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7A, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87,
+	0x88, 0x89, 0x8A, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9A, 0xA2, 0xA3, 0xA4, 0xA5,
+	0xA6, 0xA7, 0xA8, 0xA9, 0xAA, 0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7, 0xB8, 0xB9, 0xBA, 0xC2, 0xC3,
+	0xC4, 0xC5, 0xC6, 0xC7, 0xC8, 0xC9, 0xCA, 0xD2, 0xD3, 0xD4, 0xD5, 0xD6, 0xD7, 0xD8, 0xD9, 0xDA,
+	0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE7, 0xE8, 0xE9, 0xEA, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7, 0xF8,
 	0xF9, 0xFA,
 ];
 
@@ -927,10 +886,10 @@ static CHROMAREDID: u8 = 3;
 
 pub struct JPEGEncoder<W> {
 	w: W,
-	
+
 	accumulator: u32,
 	nbits: u8,
-	
+
 	luma_dctable: ~[(u8, u16)],
 	luma_actable: ~[(u8, u16)],
 	chroma_dctable: ~[(u8, u16)],
@@ -947,7 +906,7 @@ impl<W: Writer> JPEGEncoder<W> {
 
 		JPEGEncoder {
 			w: w,
-			
+
 			accumulator: 0,
 			nbits: 0,
 
@@ -977,12 +936,12 @@ impl<W: Writer> JPEGEncoder<W> {
 
 		while self.nbits >= 8 {
 			let byte = (self.accumulator & (0xFFFFFFFFu32 << 24)) >> 24;
-			
+
 			let _ = try!(self.w.write_u8(byte as u8));
 			if byte == 0xFF {
 				let _ = try!(self.w.write_u8(0x00));
 			}
-			
+
 			self.nbits -= 8;
 			self.accumulator <<= 8;
 		}
@@ -1004,13 +963,13 @@ impl<W: Writer> JPEGEncoder<W> {
 		self.write_bits(code, size)
 	}
 
-	fn write_block(&mut self, 
-				   block: &[i32], 
-				   dctable: &[(u8, u16)], 
+	fn write_block(&mut self,
+				   block: &[i32],
+				   dctable: &[(u8, u16)],
 				   actable: &[(u8, u16)]) -> IoResult<()> {
 
 		let (size, value) = encode_coefficient(block[0]);
-		
+
 		let _ = try!(self.huffman_encode(size, dctable));
 		let _ = try!(self.write_bits(value, size));
 
@@ -1028,39 +987,39 @@ impl<W: Writer> JPEGEncoder<W> {
 				}
 
 				zero_run += 1;
-			} 
+			}
 			else {
 				while zero_run > 15 {
 					let _ = try!(self.huffman_encode(0xF0, actable));
 					zero_run -= 16;
 				}
-				
+
 				let (size, value) = encode_coefficient(block[k]);
 				let symbol = (zero_run << 4) | size;
 
 				let _ = try!(self.huffman_encode(symbol, actable));
 				let _ = try!(self.write_bits(value, size));
-				
+
 				zero_run = 0;
 
 				if k == 63 {
 					break
 				}
-			} 
+			}
 		}
 
 		Ok(())
 	}
 
-	pub fn encode(&mut self, 
-				  image: &[u8], 
-				  width: u32, 
-				  height: u32, 
+	pub fn encode(&mut self,
+				  image: &[u8],
+				  width: u32,
+				  height: u32,
 				  c: colortype::ColorType) -> IoResult<()> {
-		
+
 		let tables = slice::append(~[], STD_LUMA_QTABLE);
 		let tables = slice::append(tables, STD_CHROMA_QTABLE);
-		
+
 		let components = [
 			Component {id: LUMAID, h: 1, v: 1, tq: LUMADESTINATION, dc_table: LUMADESTINATION, ac_table: LUMADESTINATION, dc_pred: 0},
 			Component {id: CHROMABLUEID, h: 1, v: 1, tq: CHROMADESTINATION, dc_table: CHROMADESTINATION, ac_table: CHROMADESTINATION, dc_pred: 0},
@@ -1129,15 +1088,21 @@ impl<W: Writer> JPEGEncoder<W> {
 				}
 
 				//Level shift and fdct
-				let mut dct_yblock   = slow_fdct(&yblock);
-				let mut dct_cb_block = slow_fdct(&cb_block);
-				let mut dct_cr_block = slow_fdct(&cr_block);
-				
+				//Coeffs are scaled by 8
+				let mut dct_yblock   = [0i32, ..64];
+				fast::fdct(yblock.as_slice(), dct_yblock);
+
+				let mut dct_cb_block = [0i32, ..64];
+				fast::fdct(cb_block.as_slice(), dct_cb_block);
+
+				let mut dct_cr_block = [0i32, ..64];
+				fast::fdct(cr_block.as_slice(), dct_cr_block);
+
 				//Quantization
 				for i in range(0, 64) {
-					dct_yblock[i]   = f32::round(dct_yblock[i]   as f32 / tables.slice_to(64)[i] as f32) as i32;
-					dct_cb_block[i] = f32::round(dct_cb_block[i] as f32 / tables.slice_from(64)[i] as f32) as i32;
-					dct_cr_block[i] = f32::round(dct_cr_block[i] as f32 / tables.slice_from(64)[i] as f32) as i32;
+					dct_yblock[i]   = f32::round((dct_yblock[i] / 8)   as f32 / tables.slice_to(64)[i] as f32) as i32;
+					dct_cb_block[i] = f32::round((dct_cb_block[i] / 8) as f32 / tables.slice_from(64)[i] as f32) as i32;
+					dct_cr_block[i] = f32::round((dct_cr_block[i] / 8) as f32 / tables.slice_from(64)[i] as f32) as i32;
 				}
 
 				//Differential DC encoding
@@ -1149,13 +1114,13 @@ impl<W: Writer> JPEGEncoder<W> {
 				cb_dcpred = dct_cb_block[0];
 				cr_dcpred = dct_cr_block[0];
 
-				let mut zzy  = ~[0i32, ..64];
-				let mut zzcb = ~[0i32, ..64];
-				let mut zzcr = ~[0i32, ..64];
+				let mut zzy  = [0i32, ..64];
+				let mut zzcb = [0i32, ..64];
+				let mut zzcr = [0i32, ..64];
 
 				zzy[0]  = y_diff;
 				zzcb[0] = cb_diff;
-				zzcr[0] = cr_diff; 
+				zzcr[0] = cr_diff;
 
 				//Permute into Zig Zig order
 				for i in range(1, 64) {
@@ -1176,9 +1141,9 @@ impl<W: Writer> JPEGEncoder<W> {
 			}
 		}
 		let _ = try!(self.pad_byte());
-		
+
 		self.write_segment(EOI, None)
-	}	
+	}
 }
 
 fn build_jfif_header() -> ~[u8] {
@@ -1199,7 +1164,7 @@ fn build_jfif_header() -> ~[u8] {
 
 fn build_frame_header(precision: u8,
 					  width: u16,
-					  height: u16, 
+					  height: u16,
 					  components: &[Component]) -> ~[u8] {
 
 	let mut m = MemWriter::new();
@@ -1211,7 +1176,7 @@ fn build_frame_header(precision: u8,
 
 	for &comp in components.iter() {
 		let _  = m.write_u8(comp.id);
-		let hv = (comp.h << 4) | comp.v; 
+		let hv = (comp.h << 4) | comp.v;
 		let _  = m.write_u8(hv);
 		let _  = m.write_u8(comp.tq);
 	}
@@ -1263,19 +1228,19 @@ fn build_huffman_segment(class: u8,
 	m.unwrap()
 }
 
-fn build_quantization_segment(precision: u8, 
-							  identifier: u8, 
+fn build_quantization_segment(precision: u8,
+							  identifier: u8,
 							  qtable: &[u8]) -> ~[u8] {
-	
+
 	assert!(qtable.len() % 64 == 0);
 	let mut m = MemWriter::new();
 
 	let p = if precision == 8 {0}
 			else {1};
 
-	let pqtq = (p << 4) | identifier as u8; 
-	let _    = m.write_u8(pqtq); 
-		
+	let pqtq = (p << 4) | identifier as u8;
+	let _    = m.write_u8(pqtq);
+
 	for i in range(0, 64) {
 		let _ = m.write_u8(qtable[UNZIGZAG[i]]);
 	}
@@ -1286,7 +1251,7 @@ fn build_quantization_segment(precision: u8,
 fn encode_coefficient(coefficient: i32) -> (u8, u16) {
 	let mut magnitude = coefficient.abs() as u16;
 	let mut num_bits  = 0u8;
-	
+
 	while magnitude > 0 {
 		magnitude >>= 1;
 		num_bits += 1;
@@ -1299,10 +1264,6 @@ fn encode_coefficient(coefficient: i32) -> (u8, u16) {
 	(num_bits, val)
 }
 
-fn level_shift_down(a: u8) -> i16 {
-	a as i16 - 128
-}
-
 fn rgb_to_ycbcr(r: u8, g: u8, b: u8) -> (u8, u8, u8) {
 	let r = r as f32;
 	let g = g as f32;
@@ -1312,19 +1273,19 @@ fn rgb_to_ycbcr(r: u8, g: u8, b: u8) -> (u8, u8, u8) {
 	let cb = -0.1687f32 * r - 0.3313f32 * g + 0.5f32    * b + 128f32;
 	let cr =  0.5f32    * r - 0.4187f32 * g - 0.0813f32 * b + 128f32;
 
-	(y as u8, cb as u8, cr as u8) 
+	(y as u8, cb as u8, cr as u8)
 }
 
-fn copy_component_blocks(source: &[u8], 
-						 x0: uint, 
+fn copy_component_blocks(source: &[u8],
+						 x0: uint,
 						 y0: uint,
 						 width: uint,
-						 bpp: uint, 
-						 rb: &mut [u8, ..64], 
-						 gb: &mut [u8, ..64], 
+						 bpp: uint,
+						 rb: &mut [u8, ..64],
+						 gb: &mut [u8, ..64],
 						 bb: &mut [u8, ..64]) {
 	for y in range(0u, 8) {
-		let ystride = (y0 + y) * bpp * width;		
+		let ystride = (y0 + y) * bpp * width;
 		for x in range(0u, 8) {
 			let xstride = x0 * bpp + x * bpp;
 			rb[y * 8 + x] = source[ystride + xstride + 0];
@@ -1334,43 +1295,12 @@ fn copy_component_blocks(source: &[u8],
 	}
 }
 
-fn slow_fdct(s: &[u8, ..64]) -> ~[i32] {
-	let a = 1.0 / f32::sqrt(2 as f32);
-	let mut out = slice::from_elem(64, 0i32); 
-
-	for v in range(0, 8) {
-		for u in range(0, 8) {
-			let mut sum = 0f32;
-
-			for x in range(0, 8) {
-				for y in range(0, 8) {
-					
-					
-					let syx = level_shift_down(s[x + 8 * y]) as f32;
-					
-					let i = f32::cos(((2 * x + 1) as f32 * u as f32 * f32::consts::PI) / 16f32);
-					let j = f32::cos(((2 * y + 1) as f32 * v as f32 * f32::consts::PI) / 16f32);
-					
-					sum += syx * i * j;
-				}		
-			}
-
-			let cu = if u == 0 {a} else {1f32};
-			let cv = if v == 0 {a} else {1f32};
-
-			out[u + 8 * v] = f32::round((cu * cv * sum) / 4f32) as i32;
-		}
-	}
-
-	out
-}
-
 fn build_huff_lut(bits: &[u8], huffval: &[u8]) -> ~[(u8, u16)] {
 	let mut lut = slice::from_elem(256, (17u8, 0u16));
 	let (huffsize, huffcode) = derive_codes_and_sizes(bits);
 
 	for (i, &v) in huffval.iter().enumerate() {
-		lut[v as uint] = (huffsize[i as uint], huffcode[i as uint]); 
+		lut[v as uint] = (huffsize[i as uint], huffcode[i as uint]);
 	}
 
 	lut
