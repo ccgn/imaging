@@ -883,6 +883,9 @@ static CHROMAREDID: u8 = 3;
 pub struct JPEGEncoder<W> {
 	w: W,
 
+	components: ~[Component],
+	tables: ~[u8],
+
 	accumulator: u32,
 	nbits: u8,
 
@@ -900,16 +903,28 @@ impl<W: Writer> JPEGEncoder<W> {
 		let cd = build_huff_lut(STD_CHROMA_DC_CODE_LENGTHS, STD_CHROMA_DC_VALUES);
 		let ca = build_huff_lut(STD_CHROMA_AC_CODE_LENGTHS, STD_CHROMA_AC_VALUES);
 
+		let components = [
+			Component {id: LUMAID, h: 1, v: 1, tq: LUMADESTINATION, dc_table: LUMADESTINATION, ac_table: LUMADESTINATION, dc_pred: 0},
+			Component {id: CHROMABLUEID, h: 1, v: 1, tq: CHROMADESTINATION, dc_table: CHROMADESTINATION, ac_table: CHROMADESTINATION, dc_pred: 0},
+			Component {id: CHROMAREDID, h: 1, v: 1, tq: CHROMADESTINATION, dc_table: CHROMADESTINATION, ac_table: CHROMADESTINATION, dc_pred: 0}
+		].clone().to_owned();
+
+		let tables = slice::append(~[], STD_LUMA_QTABLE);
+		let tables = slice::append(tables, STD_CHROMA_QTABLE);
+
 		JPEGEncoder {
 			w: w,
 
-			accumulator: 0,
-			nbits: 0,
+			components: components,
+			tables: tables,
 
 			luma_dctable: ld,
 			luma_actable: la,
 			chroma_dctable: cd,
 			chroma_actable: ca,
+
+			accumulator: 0,
+			nbits: 0,
 		}
 	}
 
@@ -976,7 +991,7 @@ impl<W: Writer> JPEGEncoder<W> {
 		loop {
 			k += 1;
 
-			if block[k] == 0 {
+			if block[UNZIGZAG[k]] == 0 {
 				if k == 63 {
 					let _ = try!(self.huffman_encode(0x00, actable));
 					break
@@ -990,7 +1005,7 @@ impl<W: Writer> JPEGEncoder<W> {
 					zero_run -= 16;
 				}
 
-				let (size, value) = encode_coefficient(block[k]);
+				let (size, value) = encode_coefficient(block[UNZIGZAG[k]]);
 				let symbol = (zero_run << 4) | size;
 
 				let _ = try!(self.huffman_encode(symbol, actable));
@@ -1007,31 +1022,89 @@ impl<W: Writer> JPEGEncoder<W> {
 		Ok(())
 	}
 
+	fn encode_RGB(&mut self, image: &[u8], width: uint, height: uint, bpp: uint) -> IoResult<()> {
+		let mut y_dcpred = 0;
+		let mut cb_dcpred = 0;
+		let mut cr_dcpred = 0;
+
+		let mut dct_yblock   = [0i32, ..64];
+		let mut dct_cb_block = [0i32, ..64];
+		let mut dct_cr_block = [0i32, ..64];
+
+		let mut yblock = [0u8, ..64];
+		let mut cb_block = [0u8, ..64];
+		let mut cr_block = [0u8, ..64];
+
+		for y in range_step(0, height as uint, 8) {
+			for x in range_step(0, width as uint, 8) {
+
+				copy_blocks_RGB(image, x, y, width as uint, bpp, &mut yblock, &mut cb_block, &mut cr_block);
+
+				//RGB -> YCbCr
+				for i in range(0, 64) {
+					let (y, cb, cr) = rgb_to_ycbcr(yblock[i], cb_block[i], cr_block[i]);
+					yblock[i] = y;
+					cb_block[i] = cb;
+					cr_block[i] = cr;
+				}
+
+				//Level shift and fdct
+				//Coeffs are scaled by 8
+				fast::fdct(yblock.as_slice(), dct_yblock);
+				fast::fdct(cb_block.as_slice(), dct_cb_block);
+				fast::fdct(cr_block.as_slice(), dct_cr_block);
+
+				//Quantization
+				for i in range(0, 64) {
+					dct_yblock[i]   = f32::round((dct_yblock[i] / 8)   as f32 / self.tables.slice_to(64)[i] as f32) as i32;
+					dct_cb_block[i] = f32::round((dct_cb_block[i] / 8) as f32 / self.tables.slice_from(64)[i] as f32) as i32;
+					dct_cr_block[i] = f32::round((dct_cr_block[i] / 8) as f32 / self.tables.slice_from(64)[i] as f32) as i32;
+				}
+
+				//Differential DC encoding
+				let y_diff  = dct_yblock[0] - y_dcpred;
+				let cb_diff = dct_cr_block[0] - cb_dcpred;
+				let cr_diff = dct_cb_block[0] - cr_dcpred;
+
+				y_dcpred  = dct_yblock[0];
+				cb_dcpred = dct_cb_block[0];
+				cr_dcpred = dct_cr_block[0];
+
+				dct_yblock[0]   = y_diff;
+				dct_cb_block[0] = cb_diff;
+				dct_cr_block[0] = cr_diff;
+
+				let la = self.luma_actable.to_owned();
+				let ld = self.luma_dctable.to_owned();
+				let cd = self.chroma_dctable.to_owned();
+				let ca = self.chroma_actable.to_owned();
+
+				let _ = try!(self.write_block(dct_yblock, ld, la));
+				let _ = try!(self.write_block(dct_cb_block, cd, ca));
+				let _ = try!(self.write_block(dct_cr_block, cd, ca));
+			}
+		}
+
+		Ok(())
+	}
+
 	pub fn encode(&mut self,
 				  image: &[u8],
 				  width: u32,
 				  height: u32,
 				  c: colortype::ColorType) -> IoResult<()> {
 
-		let tables = slice::append(~[], STD_LUMA_QTABLE);
-		let tables = slice::append(tables, STD_CHROMA_QTABLE);
-
-		let components = [
-			Component {id: LUMAID, h: 1, v: 1, tq: LUMADESTINATION, dc_table: LUMADESTINATION, ac_table: LUMADESTINATION, dc_pred: 0},
-			Component {id: CHROMABLUEID, h: 1, v: 1, tq: CHROMADESTINATION, dc_table: CHROMADESTINATION, ac_table: CHROMADESTINATION, dc_pred: 0},
-			Component {id: CHROMAREDID, h: 1, v: 1, tq: CHROMADESTINATION, dc_table: CHROMADESTINATION, ac_table: CHROMADESTINATION, dc_pred: 0}
-		];
-
 		let _ = try!(self.write_segment(SOI, None));
 
 		let buf = build_jfif_header();
 		let _   = try!(self.write_segment(APP0, Some(buf)));
 
-		let buf = build_frame_header(8, width as u16, height as u16, components);
+		let buf = build_frame_header(8, width as u16, height as u16, self.components);
 		let _   = try!(self.write_segment(SOF0, Some(buf)));
 
-		assert!(tables.len() / 64 == 2);
-		for (i, table) in tables.chunks(64).enumerate() {
+		assert!(self.tables.len() / 64 == 2);
+		let t = self.tables.clone();
+		for (i, table) in t.chunks(64).enumerate() {
 			let buf = build_quantization_segment(8, i as u8, table);
 			let _   = try!(self.write_segment(DQT, Some(buf)));
 		}
@@ -1056,93 +1129,19 @@ impl<W: Writer> JPEGEncoder<W> {
 		let buf = build_huffman_segment(ACCLASS, CHROMADESTINATION, numcodes, values);
 		let _   = try!(self.write_segment(DHT, Some(buf)));
 
-		let buf = build_scan_header(components);
+		let buf = build_scan_header(self.components);
 		let _   = try!(self.write_segment(SOS, Some(buf)));
 
 		assert!(width % 8 == 0);
 		assert!(height % 8 == 0);
 
-		let bpp = match c {
-			colortype::RGB(8) => 3,
-			colortype::RGBA(8) => 4,
+		match c {
+			colortype::RGB(8) => try!(self.encode_RGB(image, width as uint, height as uint, 3)),
+			colortype::RGBA(8) => try!(self.encode_RGB(image, width as uint, height as uint, 4)),
 			_  => fail!("unimplemented!")
 		};
 
-		let mut yblock = [0u8, ..64];
-		let mut cb_block = [0u8, ..64];
-		let mut cr_block = [0u8, ..64];
-
-		let mut y_dcpred = 0;
-		let mut cb_dcpred = 0;
-		let mut cr_dcpred = 0;
-
-		for y in range_step(0, height as uint, 8) {
-			for x in range_step(0, width as uint, 8) {
-				copy_component_blocks(image, x, y, width as uint, bpp, &mut yblock, &mut cb_block, &mut cr_block);
-
-				//RGB -> YCbCr
-				for i in range(0, 64) {
-					let (y, cb, cr) = rgb_to_ycbcr(yblock[i], cb_block[i], cr_block[i]);
-					yblock[i] = y;
-					cb_block[i] = cb;
-					cr_block[i] = cr;
-				}
-
-				//Level shift and fdct
-				//Coeffs are scaled by 8
-				let mut dct_yblock   = [0i32, ..64];
-				fast::fdct(yblock.as_slice(), dct_yblock);
-
-				let mut dct_cb_block = [0i32, ..64];
-				fast::fdct(cb_block.as_slice(), dct_cb_block);
-
-				let mut dct_cr_block = [0i32, ..64];
-				fast::fdct(cr_block.as_slice(), dct_cr_block);
-
-				//Quantization
-				for i in range(0, 64) {
-					dct_yblock[i]   = f32::round((dct_yblock[i] / 8)   as f32 / tables.slice_to(64)[i] as f32) as i32;
-					dct_cb_block[i] = f32::round((dct_cb_block[i] / 8) as f32 / tables.slice_from(64)[i] as f32) as i32;
-					dct_cr_block[i] = f32::round((dct_cr_block[i] / 8) as f32 / tables.slice_from(64)[i] as f32) as i32;
-				}
-
-				//Differential DC encoding
-				let y_diff  = dct_yblock[0] - y_dcpred;
-				let cb_diff = dct_cr_block[0] - cb_dcpred;
-				let cr_diff = dct_cb_block[0] - cr_dcpred;
-
-				y_dcpred  = dct_yblock[0];
-				cb_dcpred = dct_cb_block[0];
-				cr_dcpred = dct_cr_block[0];
-
-				let mut zzy  = [0i32, ..64];
-				let mut zzcb = [0i32, ..64];
-				let mut zzcr = [0i32, ..64];
-
-				zzy[0]  = y_diff;
-				zzcb[0] = cb_diff;
-				zzcr[0] = cr_diff;
-
-				//Permute into Zig Zig order
-				for i in range(1, 64) {
-					zzy[i]  = dct_yblock[UNZIGZAG[i]];
-					zzcb[i] = dct_cb_block[UNZIGZAG[i]];
-					zzcr[i] = dct_cr_block[UNZIGZAG[i]];
-				}
-
-				//Run length and huffman encode
-				let la = self.luma_actable.to_owned();
-				let ld = self.luma_dctable.to_owned();
-				let cd = self.chroma_dctable.to_owned();
-				let ca = self.chroma_actable.to_owned();
-
-				let _ = try!(self.write_block(zzy, ld, la));
-				let _ = try!(self.write_block(zzcb, cd, ca));
-				let _ = try!(self.write_block(zzcr, cd, ca));
-			}
-		}
 		let _ = try!(self.pad_byte());
-
 		self.write_segment(EOI, None)
 	}
 }
@@ -1277,7 +1276,7 @@ fn rgb_to_ycbcr(r: u8, g: u8, b: u8) -> (u8, u8, u8) {
 	(y as u8, cb as u8, cr as u8)
 }
 
-fn copy_component_blocks(source: &[u8],
+fn copy_blocks_RGB(source: &[u8],
 						 x0: uint,
 						 y0: uint,
 						 width: uint,
@@ -1292,6 +1291,21 @@ fn copy_component_blocks(source: &[u8],
 			rb[y * 8 + x] = source[ystride + xstride + 0];
 			gb[y * 8 + x] = source[ystride + xstride + 1];
 			bb[y * 8 + x] = source[ystride + xstride + 2];
+		}
+	}
+}
+
+fn copy_blocks_Grey(source: &[u8],
+					x0: uint,
+					y0: uint,
+					width: uint,
+					bpp: uint,
+					gb: &mut [u8, ..64]) {
+	for y in range(0u, 8) {
+		let ystride = (y0 + y) * bpp * width;
+		for x in range(0u, 8) {
+			let xstride = x0 * bpp + x * bpp;
+			gb[y * 8 + x] = source[ystride + xstride + 1];
 		}
 	}
 }
