@@ -571,7 +571,7 @@ fn upsample_mcu(out: &mut [u8], xoffset: uint, width: uint, bpp: uint, mcu: &[u8
 				for y in range(0u, 8) {
 					for x in range(0u, 8) {
 						let (a, b, c) = (y_blocks[k * 64 + x + y * 8], cb[x + y * 8], cr[x + y * 8]);
-						let (r, g, b) = ycbcr_to_rgb(a as f32, b as f32, c as f32);
+						let (r, g, b) = ycbcr_to_rgb(a , b , c );
 
 						let offset = (y0 + y) * (width * bpp) + x0 + x * bpp;
 						out[offset + 0] = r;
@@ -586,12 +586,26 @@ fn upsample_mcu(out: &mut [u8], xoffset: uint, width: uint, bpp: uint, mcu: &[u8
 	}
 }
 
-fn ycbcr_to_rgb(y: f32, cb: f32, cr: f32) -> (u8, u8, u8) {
-	let r = y + 1.402f32 * (cr - 128f32) ;
-	let g = y - 0.34414f32 * (cb - 128f32) - 0.71414f32 * (cr - 128f32);
-	let b = y + 1.772f32 * (cb - 128f32);
+fn ycbcr_to_rgb(y: u8, cb: u8, cr: u8) -> (u8, u8, u8) {
+	let y = y as f32;
+	let cr = cr as f32;
+	let cb = cb as f32;
 
-	(r as u8, g as u8, b as u8)
+	let r1 = y + 1.402f32 * (cr - 128f32) ;
+	let g1 = y - 0.34414f32 * (cb - 128f32) - 0.71414f32 * (cr - 128f32);
+	let b1 = y + 1.772f32 * (cb - 128f32);
+
+	let r = clamp(r1 as i32);
+	let g = clamp(g1 as i32);
+	let b = clamp(b1 as i32);
+
+	(r, g, b)
+}
+
+fn clamp(a: i32) -> u8 {
+	if a < 0 {0}
+	else if a > 255 {255}
+	else {a as u8}
 }
 
 //Section F.2.2.1
