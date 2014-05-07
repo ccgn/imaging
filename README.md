@@ -4,6 +4,7 @@ Learning Rust; Implementing image formats
 ###TODO
 + Implement Pure rust deflate compression
 + Encoding 16 bit images to jpeg
++ Progressive jpeg decoding
 + Implement GIF Decoder
 + Some sort of error handling instead of task failure
 
