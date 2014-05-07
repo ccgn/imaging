@@ -3,6 +3,7 @@
 *.jpg
 *.ppm
 *.jpeg
+*.gif
 
 #Binary
 *.exe
