@@ -1167,9 +1167,6 @@ impl<W: Writer> JPEGEncoder<W> {
 		let buf = build_scan_header(self.components.slice_to(num_components));
 		let _   = try!(self.write_segment(SOS, Some(buf)));
 
-		assert!(width % 8 == 0);
-		assert!(height % 8 == 0);
-
 		match c {
 			colortype::RGB(8)   => try!(self.encode_RGB(image, width as uint, height as uint, 3)),
 			colortype::RGBA(8)  => try!(self.encode_RGB(image, width as uint, height as uint, 4)),
@@ -1313,22 +1310,30 @@ fn rgb_to_ycbcr(r: u8, g: u8, b: u8) -> (u8, u8, u8) {
 	(y as u8, cb as u8, cr as u8)
 }
 
+fn value_at(s: &[u8], index: uint) -> u8 {
+	if index < s.len() {
+		s[index]
+	}else {
+		s[s.len() - 1]
+	}
+}
+
 fn copy_blocks_YCbCr(source: &[u8],
-						 x0: uint,
-						 y0: uint,
-						 width: uint,
-						 bpp: uint,
-						 yb: &mut [u8, ..64],
-						 cbb: &mut [u8, ..64],
-						 crb: &mut [u8, ..64]) {
+					 x0: uint,
+				     y0: uint,
+					 width: uint,
+					 bpp: uint,
+					 yb: &mut [u8, ..64],
+					 cbb: &mut [u8, ..64],
+					 crb: &mut [u8, ..64]) {
 	for y in range(0u, 8) {
 		let ystride = (y0 + y) * bpp * width;
 		for x in range(0u, 8) {
 			let xstride = x0 * bpp + x * bpp;
 
-			let r = source[ystride + xstride + 0];
-			let g = source[ystride + xstride + 1];
-			let b = source[ystride + xstride + 2];
+			let r = value_at(source, ystride + xstride + 0);
+			let g = value_at(source, ystride + xstride + 1);
+			let b = value_at(source, ystride + xstride + 2);
 
 			let (yc, cb, cr) = rgb_to_ycbcr(r, g, b);
 
@@ -1349,7 +1354,7 @@ fn copy_blocks_Grey(source: &[u8],
 		let ystride = (y0 + y) * bpp * width;
 		for x in range(0u, 8) {
 			let xstride = x0 * bpp + x * bpp;
-			gb[y * 8 + x] = source[ystride + xstride + 1];
+			gb[y * 8 + x] = value_at(source, ystride + xstride + 1);
 		}
 	}
 }
