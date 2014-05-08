@@ -207,10 +207,6 @@ impl<R: Reader>JPEGDecoder<R> {
 	fn decode_mcu(&mut self) -> IoResult<()> {
 		let mut i = 0;
 
-		for k in self.mcu.mut_iter() {
-			*k = 0;
-		}
-
 		let tmp = self.scan_components.clone();
 		for id in tmp.iter() {
 			let mut c = self.components.find(&(*id as uint)).unwrap().clone();
