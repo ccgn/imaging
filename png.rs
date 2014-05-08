@@ -38,7 +38,7 @@ static AVERAGE: u8 = 3;
 static PAETH: u8 = 4;
 
 pub struct PNGDecoder<R> {
-	z: ZlibDecoder<IDATReader<R>>,	
+	z: ZlibDecoder<IDATReader<R>>,
 	crc: Crc32,
 	previous: ~[u8],
 	state: PNGState,
@@ -51,7 +51,7 @@ pub struct PNGDecoder<R> {
 	palette: Option<~[(u8, u8, u8)]>,
 
 	interlace_method: u8,
-	
+
 	chunk_length: u32,
 	chunk_type: ~[u8],
 	bpp: uint,
@@ -105,14 +105,14 @@ impl<R: Reader> PNGDecoder<R> {
 
 		let filter  = try!(self.z.read_byte());
 		let _ = try!(self.z.fill(buf.mut_slice_to(self.rlength)));
-				
+
 		unfilter(filter, self.bpp, self.previous, buf.mut_slice_to(self.rlength));
 		slice::bytes::copy_memory(self.previous, buf.slice_to(self.rlength));
 
 		if self.palette.is_some() {
 			let s = (*self.palette.get_ref()).as_slice();
 			expand_palette(buf, s, self.rlength);
-		}		
+		}
 
 		Ok(buf.len())
 	}
@@ -124,7 +124,7 @@ impl<R: Reader> PNGDecoder<R> {
 
 		let row = self.rowlen();
 		let mut buf = slice::from_elem(row * self.height as uint, 0u8);
-		
+
 		for chunk in buf.mut_chunks(row) {
 			let _len = try!(self.read_scanline(chunk));
 		}
@@ -137,11 +137,11 @@ impl<R: Reader> PNGDecoder<R> {
 			Some(ref p) => p.as_slice(),
 			None        => &[]
 		}
-	} 
+	}
 
 	fn read_signature(&mut self) -> IoResult<bool> {
-		let png = try!(self.z.inner().r.read_exact(8)); 
-		
+		let png = try!(self.z.inner().r.read_exact(8));
+
 		Ok(png.as_slice() == PNGSIGNATURE)
 	}
 
@@ -155,7 +155,7 @@ impl<R: Reader> PNGDecoder<R> {
 		if self.width < 0 || self.height < 0 {
 			return Err(InvalidDimensions)
 		}
-		
+
 		self.bit_depth = m.read_byte().unwrap();
 		self.colour_type = m.read_byte().unwrap();
 
@@ -202,23 +202,23 @@ impl<R: Reader> PNGDecoder<R> {
 			_ => fail!("unknown colour type")
 		};
 
-		let bits_per_pixel = channels * self.bit_depth as uint;		
-		
+		let bits_per_pixel = channels * self.bit_depth as uint;
+
 		self.rlength = (bits_per_pixel * self.width as uint + 7) / 8;
 		self.bpp = (bits_per_pixel + 7) / 8;
 		self.previous = slice::from_elem(self.rlength as uint, 0u8);
-		
+
 		Ok(())
 	}
 
 	fn parse_PLTE(&mut self, buf: ~[u8]) -> Result<(), PNGError> {
 		self.crc.update(buf.as_slice());
 
-		let len = buf.len() / 3;	
-		
+		let len = buf.len() / 3;
+
 		if len > 256 || len > (1 << self.bit_depth) || buf.len() % 3 != 0{
 			return Err(InvalidPLTE)
-		} 
+		}
 
 		let p = slice::from_fn(256, |i| {
 			if i < len {
@@ -250,12 +250,12 @@ impl<R: Reader> PNGDecoder<R> {
 		loop {
 			let length = try!(self.z.inner().r.read_be_u32());
 			let chunk = try!(self.z.inner().r.read_exact(4));
-			
+
 			self.chunk_length = length;
 			self.chunk_type   = chunk.clone();
 
 			self.crc.update(chunk);
-			
+
 			let s = {
 				let a = str::from_utf8_owned(self.chunk_type.clone());
 				if a.is_none() {
@@ -283,10 +283,10 @@ impl<R: Reader> PNGDecoder<R> {
 					assert!(self.palette.is_some());
 					fail!("trns unimplemented")
 				}
-				
+
 				("IDAT", HaveIHDR) if self.colour_type != 3 => {
 					self.state = HaveFirstIDat;
-					self.z.inner().set_inital_length(self.chunk_length);	
+					self.z.inner().set_inital_length(self.chunk_length);
 					self.z.inner().crc.update(self.chunk_type.as_slice());
 
 					break;
@@ -296,7 +296,7 @@ impl<R: Reader> PNGDecoder<R> {
 					self.state = HaveFirstIDat;
 					self.z.inner().set_inital_length(self.chunk_length);
 					self.z.inner().crc.update(self.chunk_type.as_slice());
-			
+
 					break;
 				}
 
@@ -333,10 +333,10 @@ fn expand_palette(buf: &mut[u8], palette: &[(u8, u8, u8)], entries: uint) {
 fn unfilter(filter: u8, bpp: uint, previous: &[u8], current: &mut [u8]) {
 	assert!(previous.len() == current.len());
 	let len = current.len();
-	
+
 	match filter {
 		NOFILTER => (),
-		
+
 		SUB => {
 			for i in range(bpp, len) {
 				current[i] += current[i - bpp];
@@ -366,16 +366,8 @@ fn unfilter(filter: u8, bpp: uint, previous: &[u8], current: &mut [u8]) {
 				current[i] += filter_paeth(current[i - bpp], previous[i], previous[i - bpp]);
 			}
 		}
-		
-		n => fail!("unknown filter type: {}\n", n)
-	}
-}
 
-fn abs(a: i16) -> i16 {
-	if a < 0 {
-		a * -1
-	} else {
-		a
+		n => fail!("unknown filter type: {}\n", n)
 	}
 }
 
@@ -385,10 +377,10 @@ fn filter_paeth(a: u8, b: u8, c: u8) -> u8 {
 	let ic = c as i16;
 
 	let p = ia + ib - ic;
-	
-	let pa = abs(p - ia);
-	let pb = abs(p - ib);
-	let pc = abs(p - ic);
+
+	let pa = (p - ia).abs();
+	let pb = (p - ib).abs();
+	let pc = (p - ic).abs();
 
 	if pa <= pb && pa <= pc {
 		a
@@ -402,7 +394,7 @@ fn filter_paeth(a: u8, b: u8, c: u8) -> u8 {
 pub struct IDATReader<R> {
 	pub r: R,
 	pub crc: Crc32,
-	
+
 	eof: bool,
 	chunk_length: u32,
 }
@@ -440,7 +432,7 @@ impl<R: Reader> Reader for IDATReader<R> {
 				self.crc.reset();
 
 				self.chunk_length = try!(self.r.read_be_u32());
-				
+
 				let v = try!(self.r.read_exact(4));
 				self.crc.update(v.as_slice());
 
@@ -449,10 +441,10 @@ impl<R: Reader> Reader for IDATReader<R> {
 					_ 			 => {
 						self.eof = true;
 						break
-					}			
+					}
 				}
 			}
-			
+
 			let m = cmp::min(len - start, self.chunk_length as uint);
 
 			let slice = buf.mut_slice(start, start + m);
@@ -481,19 +473,19 @@ impl<W: Writer> PNGEncoder<W> {
 		}
 	}
 
-	pub fn encode(&mut self, 
-				  image: &[u8], 
-				  width: u32, 
-				  height: u32, 
+	pub fn encode(&mut self,
+				  image: &[u8],
+				  width: u32,
+				  height: u32,
 				  c: colortype::ColorType) -> IoResult<()> {
-		
+
 		let _ = try!(self.write_signature());
 
 		let (bytes, bpp) = build_IHDR(width, height, c);
-		let _ = try!(self.write_chunk("IHDR", bytes)); 
-		
+		let _ = try!(self.write_chunk("IHDR", bytes));
+
 		let compressed_bytes = build_IDAT(image, bpp, width, height);
-		
+
 		for chunk in compressed_bytes.chunks(1024 * 256) {
 			let _ = try!(self.write_chunk("IDAT", chunk));
 		}
@@ -524,7 +516,7 @@ impl<W: Writer> PNGEncoder<W> {
 
 fn build_IHDR(width: u32, height: u32, c: colortype::ColorType) -> (~[u8], uint) {
 	let mut m = MemWriter::with_capacity(13);
-	
+
 	let _ = m.write_be_u32(width);
 	let _ = m.write_be_u32(height);
 
@@ -549,7 +541,7 @@ fn build_IHDR(width: u32, height: u32, c: colortype::ColorType) -> (~[u8], uint)
 
 	let _ = m.write_u8(bit_depth);
 	let _ = m.write_u8(colortype);
-	
+
 	//compression method, filter method and interlace
 	let _ = m.write_u8(0);
 	let _ = m.write_u8(0);
@@ -564,7 +556,7 @@ fn build_IHDR(width: u32, height: u32, c: colortype::ColorType) -> (~[u8], uint)
 		_ => fail!("unknown colour type")
 	};
 
-	let bpp = ((channels * bit_depth + 7) / 8) as uint; 
+	let bpp = ((channels * bit_depth + 7) / 8) as uint;
 
 	(m.unwrap(), bpp)
 }
@@ -572,7 +564,7 @@ fn build_IHDR(width: u32, height: u32, c: colortype::ColorType) -> (~[u8], uint)
 fn filter(method: u8, bpp: uint, previous: &[u8], current: &mut [u8]) {
 	let len  = current.len();
 	let orig = slice::from_fn(len, |i| current[i]);
-	
+
 	match method {
 		NOFILTER => (),
 		SUB      => {
@@ -622,7 +614,7 @@ fn select_filter(rowlength: uint, bpp: uint, previous: &[u8], current_s: &mut [u
 		if this_sum < sum {
 			sum = this_sum;
 			method = i as u8 + 1;
-		} 
+		}
 	}
 
 	method
@@ -643,7 +635,7 @@ fn build_IDAT(image: &[u8], bpp: uint, width: u32, height: u32) -> ~[u8] {
 		}
 
 		let filter = select_filter(rowlen, bpp, p, c);
-		
+
 		outrow[0]  = filter;
 		let out    = outrow.mut_slice_from(1);
 		let stride = (filter as uint - 1) * rowlen;
