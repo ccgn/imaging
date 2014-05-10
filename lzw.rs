@@ -80,11 +80,13 @@ impl<R: Reader> Reader for LZWReader<R> {
 
 		let mut index = match self.save {
 			Some((code, k)) => {
-				let s = self.dict[code].get_ref().slice_from(k);
+				let s = self.dict[code].get_ref();
 				let want = cmp::min(buf.len(), s.len());
 
-				slice::bytes::copy_memory(buf, s.slice_to(want));
-				self.save = None;
+				slice::bytes::copy_memory(buf, s..slice_from(k).slice_to(want));
+
+				self.save = if want == s.len() { None }
+					    else { Some((code, s.len() - k)) };
 
 				want
 			}
@@ -92,7 +94,7 @@ impl<R: Reader> Reader for LZWReader<R> {
 			None => 0
 		};
 
-		'Loop: loop {
+		while index < buf.len() {
 			let code = try!(self.read_code());
 
 			if code == self.clear {
@@ -127,7 +129,7 @@ impl<R: Reader> Reader for LZWReader<R> {
 			for (k, &s) in self.dict[code].get_ref().iter().enumerate() {
 				if index == buf.len() {
 					self.save = Some((code, k));
-					break 'Loop
+					break
 				}
 
 				buf[index] = s;
