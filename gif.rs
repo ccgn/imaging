@@ -48,7 +48,6 @@ impl<R: Reader> GIFDecoder<R> {
 
     fn read_block(&mut self) -> IoResult<~[u8]> {
         let size = try!(self.r.read_u8());
-
         self.r.read_exact(size as uint)
     }
 
@@ -89,18 +88,23 @@ impl<R: Reader> GIFDecoder<R> {
 
         let minimum_code_size = try!(self.r.read_u8());
 
+        let mut data = ~[];
+
         loop {
             let b = try!(self.read_block());
             if b.len() == 0 {
                 break
             }
+
+            data = data + b;
         }
 
+        println!("data {}", data.len());
         Ok(())
     }
 
     fn read_graphic_control_extension(&mut self) -> IoResult<()> {
-        println!("GRAPHIC CONTROL EXTENSION");
+        println!("\nGRAPHIC CONTROL EXTENSION");
 
         let size   = try!(self.r.read_u8());
         let fields = try!(self.r.read_u8());
