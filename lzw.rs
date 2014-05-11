@@ -21,8 +21,10 @@ pub struct LZWReader<R> {
 	end: u16,
 	clear: u16,
 
-	save: Option<(u16, uint)>,
-	eof: bool
+	eof: bool,
+
+	out: ~[u8],
+	pos: uint
 }
 
 impl<R: Reader> LZWReader<R> {
@@ -49,7 +51,9 @@ impl<R: Reader> LZWReader<R> {
 			clear: 1 << size as u16,
 			end: (1 << size as u16) + 1,
 
-			save: None,
+			out: ~[],
+			pos: 0,
+
 			eof: false
 		}
 	}
@@ -70,36 +74,20 @@ impl<R: Reader> LZWReader<R> {
 
 		Ok(code as u16)
 	}
-}
 
-impl<R: Reader> Reader for LZWReader<R> {
-	fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
-		if self.eof {
-			return Err(io::standard_error(io::EndOfFile))
-		}
-
-		let mut index = match self.save {
-			Some((code, k)) => {
-				let s = self.dict[code].get_ref();
-				let want = cmp::min(buf.len(), s.len());
-
-				slice::bytes::copy_memory(buf, s..slice_from(k).slice_to(want));
-
-				self.save = if want == s.len() { None }
-					    else { Some((code, s.len() - k)) };
-
-				want
-			}
-
-			None => 0
-		};
-
-		while index < buf.len() {
+	fn decode(&mut self) -> IoResult<()> {
+		loop {
 			let code = try!(self.read_code());
 
 			if code == self.clear {
-				self.next_code = (1 << self.code_size as u16) + 2;
 				self.code_size = self.initial_size + 1;
+				self.next_code = (1 << self.initial_size as u16) + 2;
+				self.dict = slice::from_elem(1 << MAXCODESIZE, None);
+
+				for i in range(0, 1 << self.initial_size) {
+					self.dict[i] = Some(~[i as u8])
+				}
+
 				continue
 			}
 
@@ -127,16 +115,29 @@ impl<R: Reader> Reader for LZWReader<R> {
 			self.prev = self.dict[code].get_ref().to_owned();
 
 			for (k, &s) in self.dict[code].get_ref().iter().enumerate() {
-				if index == buf.len() {
-					self.save = Some((code, k));
-					break
-				}
-
-				buf[index] = s;
-				index += 1;
+				self.out.push(s);
 			}
 		}
 
-		Ok(index)
+		Ok(())
+	}
+}
+
+impl<R: Reader> Reader for LZWReader<R> {
+	fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
+		if !self.eof {
+			let _ = try!(self.decode());
+		}
+
+		if self.pos == self.out.len(){
+			return Err(io::standard_error(io::EndOfFile))
+		}
+
+		let a = cmp::min(buf.len(), self.out.len() - self.pos);
+		slice::bytes::copy_memory(buf, self.out.slice(self.pos, self.pos + a));
+
+		self.pos += a;
+
+		Ok(a)
 	}
 }
