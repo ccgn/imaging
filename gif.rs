@@ -146,6 +146,9 @@ impl<R: Reader> GIFDecoder<R> {
 			     trans_index,
 			     self.image);
 
+		self.local_table = None,
+		self.local_transparent_index = None
+
 		Ok(())
 	}
 
@@ -174,8 +177,6 @@ impl<R: Reader> GIFDecoder<R> {
 	}
 
 	fn read_graphic_control_extension(&mut self) -> IoResult<()> {
-		println!("\nGRAPHIC CONTROL EXTENSION");
-
 		let size   = try!(self.r.read_u8());
 		assert!(size == 4);
 
@@ -184,7 +185,6 @@ impl<R: Reader> GIFDecoder<R> {
 		let trans  = try!(self.r.read_u8());
 
 		println!("delay {}ms", delay * 10);
-		println!("transparent index {0} - {1}", trans, fields & 1 != 0);
 
 		if fields & 1 != 0 {
 			self.local_transparent_index = Some(trans);
