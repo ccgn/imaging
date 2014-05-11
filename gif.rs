@@ -124,30 +124,32 @@ impl<R: Reader> GIFDecoder<R> {
 
 		let indices = try!(self.read_image_data());
 
-		let trans_index = if self.local_transparent_index.is_some() {
-			self.local_transparent_index
-		} else {
-			self.global_backgroud_index
-		};
+		{
+			let trans_index = if self.local_transparent_index.is_some() {
+				self.local_transparent_index
+			} else {
+				self.global_backgroud_index
+			};
 
-		let table = if self.local_table.is_some() {
-			self.local_table.get_ref().as_slice()
-		} else {
-			self.global_table.as_slice()
-		};
+			let table = if self.local_table.is_some() {
+				self.local_table.get_ref().as_slice()
+			} else {
+				self.global_table.as_slice()
+			};
 
-		expand_image(table,
-			     indices,
-			     image_top as uint,
-			     image_left as uint,
-			     image_width as uint,
-			     image_height as uint,
-			     self.width as uint * 3,
-			     trans_index,
-			     self.image);
+			expand_image(table,
+				     indices,
+				     image_top as uint,
+				     image_left as uint,
+				     image_width as uint,
+				     image_height as uint,
+				     self.width as uint * 3,
+				     trans_index,
+				     self.image);
+		}
 
-		self.local_table = None,
-		self.local_transparent_index = None
+		self.local_table = None;
+		self.local_transparent_index = None;
 
 		Ok(())
 	}
@@ -158,19 +160,19 @@ impl<R: Reader> GIFDecoder<R> {
 		match identifier {
 		    APPLICATION    => try!(self.read_application_extension()),
 		    GRAPHICCONTROL => try!(self.read_graphic_control_extension()),
-		    _ => {
-		    	let mut data = ~[];
+		    COMMENT 	   => try!(self.read_comment_extension()),
+		    _ => fail!("unsupported extension")
+		}
 
-			loop {
-				let b = try!(self.read_block());
-				if b.len() == 0 {
-					break
-				}
+		Ok(())
+	}
 
-				data = data + b;
+	fn read_comment_extension(&mut self) -> IoResult<()> {
+		loop {
+			let b = try!(self.read_block());
+			if b.len() == 0 {
+				break
 			}
-
-		    }
 		}
 
 		Ok(())
@@ -253,9 +255,6 @@ impl<R: Reader> GIFDecoder<R> {
 		let mut i = 0;
 		loop {
 			let byte = try!(self.r.read_u8());
-
-			println!("byte 0x{:X}", byte);
-
 			if byte == EXTENSION {
 				let _ = try!(self.read_extension());
 			} else if byte == IMAGEDESCRIPTOR {
