@@ -81,12 +81,14 @@ impl<R: Reader> LZWReader<R> {
 
 			if code == self.clear {
 				self.code_size = self.initial_size + 1;
-				self.next_code = (1 << self.initial_size as u16) + 2;
+				self.next_code = self.end + 1;
 				self.dict = slice::from_elem(1 << MAXCODESIZE, None);
 
 				for i in range(0, 1 << self.initial_size) {
 					self.dict[i] = Some(~[i as u8])
 				}
+
+				self.prev = ~[];
 
 				continue
 			}
