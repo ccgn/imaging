@@ -116,7 +116,7 @@ impl<R: Reader> LZWReader<R> {
 
 			self.prev = self.dict[code].get_ref().to_owned();
 
-			for (k, &s) in self.dict[code].get_ref().iter().enumerate() {
+			for &s in self.dict[code].get_ref().iter() {
 				self.out.push(s);
 			}
 		}

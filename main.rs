@@ -10,15 +10,18 @@ use jpeg::JPEGDecoder;
 use jpeg::JPEGEncoder;
 use png::PNGDecoder;
 use png::PNGEncoder;
+use gif::GIFDecoder;
 use ppm::PPMEncoder;
 
 mod colortype;
 mod hash;
 mod deflate;
 mod zlib;
+mod lzw;
 mod dct;
 mod jpeg;
 mod png;
+mod gif;
 mod ppm;
 
 fn main() {
@@ -51,6 +54,18 @@ fn main() {
 			let (b, c) = p.dimensions();
 			let d = p.color_type();
 			let _ = p.palette();
+
+			(a, b, c, d)
+		}
+		Some("gif") => {
+			let mut g = GIFDecoder::new(m);
+
+			//Decode first image only
+			//Call again to decode successive images
+			let a = g.decode_image().unwrap();
+			let (b, c) = g.dimensions();
+			let d = g.color_type();
+			let _ = g.delay();
 
 			(a, b, c, d)
 		}

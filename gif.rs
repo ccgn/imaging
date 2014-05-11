@@ -1,21 +1,9 @@
-extern crate flate;
-
-use std::os;
 use std::slice;
-use std::io::File;
 use std::io::MemReader;
 use std::io::IoResult;
 
+use colortype;
 use lzw::LZWReader;
-
-use png::PNGEncoder;
-
-mod lzw;
-mod colortype;
-mod deflate;
-mod zlib;
-mod hash;
-mod png;
 
 static IMAGEDESCRIPTOR: u8 = 0x2C;
 static EXTENSION: u8 = 0x21;
@@ -24,19 +12,23 @@ static GRAPHICCONTROL: u8 = 0xF9;
 static COMMENT: u8 = 0xFE;
 static TRAILER: u8 = 0x3B;
 
-struct GIFDecoder <R> {
+
+pub struct GIFDecoder <R> {
 	r: R,
 
-	pub width: u16,
-	pub height: u16,
+	width: u16,
+	height: u16,
 
 	global_table: [(u8, u8, u8), ..256],
 	local_table: Option<~[(u8, u8, u8)]>,
 
-	pub image: ~[u8],
+	delay: u16,
+	image: ~[u8],
 
 	global_backgroud_index: Option<u8>,
 	local_transparent_index: Option<u8>,
+
+	have_header: bool
 }
 
 impl<R: Reader> GIFDecoder<R> {
@@ -50,10 +42,13 @@ impl<R: Reader> GIFDecoder<R> {
 			global_table: [(0u8, 0u8, 0u8), ..256],
 			local_table: None,
 
+			delay: 0,
 			image: ~[],
 
 			global_backgroud_index: None,
-			local_transparent_index: None
+			local_transparent_index: None,
+
+			have_header: false
 		}
 	}
 
@@ -183,24 +178,14 @@ impl<R: Reader> GIFDecoder<R> {
 		assert!(size == 4);
 
 		let fields = try!(self.r.read_u8());
-		let delay  = try!(self.r.read_le_u16());
+		self.delay = try!(self.r.read_le_u16());
 		let trans  = try!(self.r.read_u8());
-
-		println!("delay {}ms", delay * 10);
 
 		if fields & 1 != 0 {
 			self.local_transparent_index = Some(trans);
 		}
 
-		let disposal = (fields & 0x1C) >> 2;
-		match disposal {
-			0 => println!("no disposal"),
-			1 => println!("do not dispose"),
-			2 => println!("restore to background"),
-			3 => println!("restore to prev"),
-			_ => println!("undefined")
-		}
-
+		let _disposal = (fields & 0x1C) >> 2;
 		let _term = try!(self.r.read_u8());
 
 		Ok(())
@@ -249,30 +234,41 @@ impl<R: Reader> GIFDecoder<R> {
 		Ok(())
 	}
 
-	pub fn decode(&mut self) -> IoResult<()> {
-		let _ = try!(self.read_header());
-		let _ = try!(self.read_logical_screen_descriptor());
-		let mut i = 0;
+	pub fn dimensions(&self) -> (u32, u32) {
+		(self.width as u32, self.height as u32)
+	}
+
+	pub fn color_type(&self) -> colortype::ColorType {
+		colortype::RGB(8)
+	}
+
+	pub fn delay(&self) -> u16 {
+		self.delay
+	}
+
+	pub fn decode_image(&mut self) -> IoResult<~[u8]> {
+		if !self.have_header {
+			let _ = try!(self.read_header());
+			let _ = try!(self.read_logical_screen_descriptor());
+
+			self.have_header = true;
+		}
+
 		loop {
-			let byte = try!(self.r.read_u8());
-			if byte == EXTENSION {
-				let _ = try!(self.read_extension());
-			} else if byte == IMAGEDESCRIPTOR {
-				let _ = try!(self.read_image_descriptor());
+			let block = try!(self.r.read_u8());
 
-				let fout = File::create(&Path::new(os::args()[1] + format!("-{}", i) + ".png")).unwrap();
-
-				let _ = PNGEncoder::new(fout).encode(self.image.as_slice(),
-								     self.width as u32,
-								     self.height as u32,
-								     colortype::RGB(8));
-				i += 1;
-			} else {
-				break
+			match block {
+				EXTENSION => try!(self.read_extension()),
+				IMAGEDESCRIPTOR => {
+					let _ = try!(self.read_image_descriptor());
+					return Ok(self.image.clone())
+				}
+				TRAILER => break,
+				_ => fail!("unknown block {:X}", block)
 			}
 		}
 
-		Ok(())
+		Ok(~[])
 	}
 }
 
@@ -300,17 +296,4 @@ fn expand_image(palete: &[(u8, u8, u8)],
 			image[(y0 + y) * stride + x0 * 3 + x * 3 + 2] = b;
 		}
 	}
-}
-
-fn main() {
-	let file = if os::args().len() == 2 {
-		os::args()[1]
-	} else {
-		fail!("provide a file")
-	};
-
-	let fin = File::open(&Path::new(file.clone())).unwrap();
-
-	let mut g = GIFDecoder::new(fin);
-	let _ = g.decode();
 }
