@@ -88,7 +88,7 @@ impl<R: Reader> LZWReader<R> {
 					self.dict[i] = Some(~[i as u8])
 				}
 
-				self.prev = ~[];
+				self.prev.clear();
 
 				continue
 			}
