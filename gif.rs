@@ -31,11 +31,12 @@ struct GIFDecoder <R> {
 	pub height: u16,
 
 	global_table: [(u8, u8, u8), ..256],
-	local_table: Option<~[u8]>,
+	local_table: Option<~[(u8, u8, u8)]>,
 
 	pub image: ~[u8],
 
-	backgroud_index: u8,
+	global_backgroud_index: Option<u8>,
+	local_transparent_index: Option<u8>,
 }
 
 impl<R: Reader> GIFDecoder<R> {
@@ -51,7 +52,8 @@ impl<R: Reader> GIFDecoder<R> {
 
 			image: ~[],
 
-			backgroud_index: 0,
+			global_backgroud_index: None,
+			local_transparent_index: None
 		}
 	}
 
@@ -104,28 +106,44 @@ impl<R: Reader> GIFDecoder<R> {
 		let interlace   = fields & 40 != 0;
 		let table_size  = fields & 7;
 
-		println!("image top {0} left {1}", image_top, image_left);
-		println!("image width {0} height {1}", image_width, image_height);
-
 		if interlace {
 			fail!("interlace not implemented")
 		}
 
 		if local_table {
-			println!("local table exists");
-			let n = 1 << (table_size + 1);
-			let b = try!(self.r.read_exact(3 * n));
+			let n   = 1 << (table_size + 1);
+			let buf = try!(self.r.read_exact(3 * n));
+			let mut b = slice::from_elem(n, (0u8, 0u8, 0u8));
+
+			for (i, rgb) in buf.chunks(3).enumerate() {
+				b[i] = (rgb[0], rgb[1], rgb[2]);
+			}
+
 			self.local_table = Some(b);
 		}
 
-		let b = try!(self.read_image_data());
-		expand_image(self.global_table,
-			     b,
+		let indices = try!(self.read_image_data());
+
+		let trans_index = if self.local_transparent_index.is_some() {
+			self.local_transparent_index
+		} else {
+			self.global_backgroud_index
+		};
+
+		let table = if self.local_table.is_some() {
+			self.local_table.get_ref().as_slice()
+		} else {
+			self.global_table.as_slice()
+		};
+
+		expand_image(table,
+			     indices,
 			     image_top as uint,
 			     image_left as uint,
 			     image_width as uint,
 			     image_height as uint,
 			     self.width as uint * 3,
+			     trans_index,
 			     self.image);
 
 		Ok(())
@@ -165,10 +183,12 @@ impl<R: Reader> GIFDecoder<R> {
 		let delay  = try!(self.r.read_le_u16());
 		let trans  = try!(self.r.read_u8());
 
-		println!("size {}", size);
-		println!("fields {:0>8t}", fields);
 		println!("delay {}ms", delay * 10);
 		println!("transparent index {0} - {1}", trans, fields & 1 != 0);
+
+		if fields & 1 != 0 {
+			self.local_transparent_index = Some(trans);
+		}
 
 		let disposal = (fields & 0x1C) >> 2;
 		match disposal {
@@ -204,7 +224,6 @@ impl<R: Reader> GIFDecoder<R> {
 		self.image  = slice::from_elem(self.width as uint *
 					       self.height as uint *
 					       3, 0u8);
-		println!("w {0} h {1}", self.width, self.height);
 
 		let fields = try!(self.r.read_u8());
 
@@ -213,7 +232,8 @@ impl<R: Reader> GIFDecoder<R> {
 			      else {0};
 
 		if global_table {
-			self.backgroud_index = try!(self.r.read_u8());
+			let b = try!(self.r.read_u8());
+			self.global_backgroud_index = Some(b);
 		}
 
 		let _aspect_ratio = try!(self.r.read_u8());
@@ -264,14 +284,16 @@ fn expand_image(palete: &[(u8, u8, u8)],
 		width: uint,
 		height: uint,
 		stride: uint,
+		trans_index: Option<u8>,
 		image: &mut [u8]) {
-
-	println!("indices len {0}, 3x {1}", indices.len(), 3 * indices.len());
-	println!("image len {}", image.len());
 
 	for y in range(0, height) {
 		for x in range(0, width) {
 			let index = indices[y * width + x];
+			if trans_index == Some(index as u8) {
+				continue
+			}
+
 			let (r, g, b) = palete[index];
 
 			image[(y0 + y) * stride + x0 * 3 + x * 3 + 0] = r;
