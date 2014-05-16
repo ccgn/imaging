@@ -62,6 +62,7 @@ fn main() {
 
 			//Decode first image only
 			//Call again to decode successive images
+			//Returns empty array when done
 			let a = g.decode_image().unwrap();
 			let (b, c) = g.dimensions();
 			let d = g.color_type();
