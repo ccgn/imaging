@@ -4,10 +4,15 @@
 *.ppm
 *.jpeg
 *.gif
+*.webp
+*.vp8
 
 #Binary
 *.exe
 *.o
+
+#Docs
+*.txt
 
 ## Windows detritus
 # Windows image file caches
