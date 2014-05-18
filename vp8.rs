@@ -628,6 +628,7 @@ impl<R: Reader> BoolReader<R> {
 struct MacroBlock {
 	bpred: [i8, ..16],
 	luma_mode: i8,
+        chroma_mode: i8,
 }
 
 #[deriving(Default)]
@@ -930,7 +931,7 @@ impl<R: Reader> VP8<R> {
 		Ok(())
 	}
 
-	pub fn read_macroblock_header(&mut self) -> IoResult<()> {
+	pub fn read_macroblock_header(&mut self) -> IoResult<(i8,> {
 		if self.segments_enabled && self.segments_update_map {
 			let segment_id = try!(self.b.read_with_tree(SEGMENT_ID_TREE,
 								    self.segment_tree_probs));
@@ -984,8 +985,6 @@ impl<R: Reader> VP8<R> {
 			println!("uvmode: {}", uvmode);
 		}
 
-		fail!("");
-
 		Ok(())
 	}
 
@@ -994,6 +993,10 @@ impl<R: Reader> VP8<R> {
 
 		self.read_macroblock_header()
 	}
+}
+
+fn prepare_intra_predict() {
+
 }
 
 fn init_top_macroblocks(width: uint) -> ~[MacroBlock] {
@@ -1006,4 +1009,167 @@ fn init_top_macroblocks(width: uint) -> ~[MacroBlock] {
 	};
 
 	slice::from_fn(mb_width + 2, |_| mb)
+}
+
+fn predict_VPRED(above: &[u8], size: uint, dest: &mut [u8]) {
+        for y in range(0, size) {
+                for x in range(0, size) {
+                        dest[x + size * y] = above[x];
+                }
+        }
+}
+
+fn predict_HPRED(left: &[u8], size: uint, dest: &mut [u8]) {
+        for y in range(0, size) {
+                for x in range(0, size) {
+                        dest[x + size * y] = left[y];
+                }
+        }
+}
+
+fn predict_DCPRED(left: Option<&[u8]>, above: Option<&[u8]>, size: uint, dest: &mut [u8]) {
+        let mut sum = 0;
+        let mut shf = if size == 8 {2} else {3};;
+
+        if left.is_some() {
+                sum += left.get_ref().iter().sum();
+                shf += 1;
+        }
+
+        if above.is_some() {
+                sum += above.get_ref().iter().sum();
+                shf += 1;
+        }
+
+        let dcval = if left.is_none() && above.is_none() {
+                128u16
+        } else {
+                (sum + (1 << (shf - 1))) >> shf
+        }
+
+        for i in range(0, size * size) {
+                dest[i] = dcval as u8;
+        }
+}
+
+fn predict_TMPRED(p: u8, left: &[u8], above: &[u8], size: uint, dest: &mut [u8]) {
+        for y in range(0, size) {
+                for x in range(0, size) {
+                        let pred = left[y] as i16 + above[x] as i16 - p as i16;
+                        dest[x + size * y] = clip(pred);
+                }
+        }
+}
+
+fn predict_BDCPRED(left: &[u8], above: &[u8], dest: &mut [u8]) {
+        let mut v = 0;
+        for i in range(0, 4) {
+                v += left[i] as u16 + above[i] as u16;
+        }
+
+        v >>= 3;
+
+        for y in range(0, 4) {
+                for x in range(0, 4) {
+                        dest[x + y * 4] = v as u8;
+                }
+        }
+}
+
+fn predict_BVEPRED(above: &[u8], dest: &mut [u8]) {
+        for i in range(0, 4) {
+                let a = avg3p(above, i);
+
+                dest[0 + 4 * i] = a;
+                dest[1 + 4 * i] = a;
+                dest[2 + 4 * i] = a;
+                dest[3 + 4 * i] = a;
+        }
+}
+
+fn predict_BHEPRED(left: &[u8], dest: &mut [u8]) {
+        for i in range(0, 4) {
+                let a = if i < 3 { avg3p(left, i) }
+                        else { avg3(left[3], left[4], left[4]) };
+
+                dest[i + 4 * 1] = a;
+                dest[i + 4 * 2] = a;
+                dest[i + 4 * 3] = a;
+                dest[i + 4 * 4] = a;
+        }
+}
+
+fn predict_BLDPRED(above: &[u8], dest: &mut [u8]) {
+        dest[0 * 4 + 0] = avg3p(above, 1);
+        dest[0 * 4 + 1] = dest[1 * 4 + 0] = avg3p(above, 2);
+        dest[0 * 4 + 2] = dest[1 * 4 + 1] = dest[2 * 4 + 0] = avg3p(above, 3);
+        dest[0 * 4 + 3] = dest[1 * 4 + 2] = dest[2 * 4 + 1] = dest[3 * 4 + 0] = avg3p(above, 4);
+        dest[1 * 4 + 3] = dest[2 * 4 + 2] = dest[3 * 4 + 1] = avg3p(above, 5);
+        dest[2 * 4 + 3] = dest[3 * 4 + 2] = avg3p(above, 6);
+        dest[3 * 4 + 3] = avg3(above[6], above[7], above[7]);
+}
+
+fn predict_BRDPRED(edge: &[u8], dest: &mut [u8]) {
+        dest[3 * 4 + 0] = avg3p(edge, 1);
+        dest[3 * 4 + 1] = dest[2 * 4 + 0] = avg3p(edge, 2);
+        dest[3 * 4 + 2] = dest[2 * 4 + 1] = dest[1 * 4 + 0] = avg3p(edge, 3);
+        dest[3 * 4 + 3] = dest[2 * 4 + 2] = dest[1 * 4 + 1] = dest[0 * 4 + 0] = avg3p(edge, 4);
+        dest[2 * 4 + 3] = dest[1 * 4 + 2] = dest[0 * 4 + 1] = avg3p(edge, 5);
+        dest[1 * 4 + 3] = dest[0 * 4 + 2] = avg3p(edge, 6);
+        dest[0 * 4 + 3] = avg3p(edge, 7);
+}
+
+fn predict_BVRPRED(edge: &[u8], dest: &mut [u8]) {
+        dest[3 * 4 + 0] = avg3p(edge, 2);
+        dest[2 * 4 + 0] = avg3p(edge, 3);
+        dest[3 * 4 + 1] = dest[1 * 4 + 0] = avg3p(edge, 4);
+        dest[2 * 4 + 1] = dest[0 * 4 + 0] = avg2p(edge, 4);
+        dest[3 * 4 + 2] = dest[1 * 4 + 1] = avg3p(edge, 5);
+        dest[2 * 4 + 2] = dest[0 * 4 + 1] = avg2p(edge, 5);
+        dest[3 * 4 + 3] = dest[1 * 4 + 2] = avg3p(edge, 6);
+        dest[2 * 4 + 3] = dest[0 * 4 + 2] = avg2p(edge, 6);
+        dest[1 * 4 + 3] = avg3p(edge, 7);
+        dest[0 * 4 + 3] = avg2p(edge, 7);
+}
+
+fn predict_BVLPRED(above: &[u8], dest: &mut [u8]) {
+        dest[0 * 4 + 0] = avg2p(above, 0);
+        dest[1 * 4 + 0] = avg3p(above, 1);
+        dest[2 * 4 + 0] = dest[0 * 4 + 1] = avg2p(above, 1);
+        dest[1 * 4 + 1] = dest[3 * 4 + 0] = avg3p(above, 2);
+        dest[2 * 4 + 1] = dest[0 * 4 + 2] = avg2p(above, 2);
+        dest[3 * 4 + 1] = dest[1 * 4 + 2] = avg3p(above, 3);
+        dest[2 * 4 + 2] = dest[0 * 4 + 3] = avg2p(above, 3);
+        dest[3 * 4 + 2] = dest[1 * 4 + 3] = avg3p(above, 4);
+        dest[2 * 4 + 3] = avg3p(above, 5);
+        dest[3 * 4 + 3] = avg3p(above, 6);
+}
+
+fn predict_BHDPRED(edge: &[u8], dest: &mut [u8]) {
+        edge[3 * 4 + 0] = avg2p(edge, 0);
+        edge[3 * 4 + 1] = avg3p(edge, 1);
+        edge[2 * 4 + 0] = edge[3 * 4 + 2] = avg2p(edge, 1);
+        edge[2 * 4 + 1] = edge[3 * 4 + 3] = avg3p(edge, 2);
+        edge[2 * 4 + 2] = edge[1 * 4 + 0] = avg2p(edge, 2);
+        edge[2 * 4 + 3] = edge[1 * 4 + 1] = avg3p(edge, 3);
+        edge[1 * 4 + 2] = edge[0 * 4 + 0] = avg2p(edge, 3);
+        edge[1 * 4 + 3] = edge[0 * 4 + 1] = avg3p(edge, 4);
+        edge[0 * 4 + 2] = avg3p(edge, 5);
+        edge[0 * 4 + 3] = avg3p(edge, 6);
+}
+
+fn predict_BHUPRED(left: &[u8], dest: &mut [u8]) {
+        dest[0 * 4 + 0] = avg2p(left, 0);
+        dest[0 * 4 + 1] = avg3p(left, 1);
+        dest[0 * 4 + 2] = dest[1 * 4 + 0] = avg2p(left, 1);
+        dest[0 * 4 + 3] = dest[1 * 4 + 1] = avg3p(left, 2);
+        dest[1 * 4 + 2] = dest[2 * 4 + 0] = avg2p(left, 2);
+        dest[1 * 4 + 3] = dest[2 * 4 + 1] = avg3(left[2], left[3], left[3]);
+        dest[2 * 4 + 2] = dest[2 * 4 + 3] = dest[3 * 4 + 0] = dest[3 * 4 + 1] = dest[3 * 4 + 2] = dest[3 * 4 + 3] = left[3];
+}
+
+fn clip(a: i16) -> u8 {
+        if a < 0 { 0u8 }
+        else if a > 255 { 255u8 }
+        else { a as u8 }
 }
