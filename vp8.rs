@@ -529,30 +529,74 @@ static COEFF_PROBS: TokenProbTables = [
         ]
 ];
 
-struct BoolReader<R> {
-	pub r: R,
+//DCT Tokens
+static DCT_0: i8 = 0;
+static DCT_1: i8 = 1;
+static DCT_2: i8 = 2;
+static DCT_3: i8 = 3;
+static DCT_4: i8 = 4;
+static DCT_CAT1: i8 = 5;
+static DCT_CAT2: i8 = 6;
+static DCT_CAT3: i8 = 7;
+static DCT_CAT4: i8 = 8;
+static DCT_CAT5: i8 = 9;
+static DCT_CAT6: i8 = 10;
+static DCT_EOB: i8 = 11;
+
+static DCT_TOKEN_TREE: [i8, ..22] = [
+        -DCT_EOB, 2,
+        -DCT_0, 4,
+        -DCT_1, 6,
+        8, 12,
+        -DCT_2, 10,
+        -DCT_3, -DCT_4,
+        14, 16,
+        -DCT_CAT1, -DCT_CAT2,
+        18, 20,
+        -DCT_CAT3, -DCT_CAT4,
+        -DCT_CAT5, -DCT_CAT6
+];
+
+static PROB_DCT_CAT: [[Prob, ..12], ..6] = [
+        [159,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,    0,],
+        [165, 145,   0,   0,   0,   0,   0,   0,   0,   0,   0,    0,],
+        [173, 148, 140,   0,   0,   0,   0,   0,   0,   0,   0,    0,],
+        [176, 155, 140, 135,   0,   0,   0,   0,   0,   0,   0,    0,],
+        [180, 157, 141, 134, 130,   0,   0,   0,   0,   0,   0,    0,],
+        [254, 254, 243, 230, 196, 177, 153, 140, 133, 130, 129,    0,],
+];
+
+static DCT_CAT_BASE: [u8, ..6] = [5, 7, 11, 19, 35, 67];
+static COEFF_BANDS: [u8, ..16] = [0, 1, 2, 3, 6, 4, 5, 6, 6, 6, 6, 6, 6, 6, 6, 7];
+
+struct BoolReader {
+	buf: ~[u8],
+        index: uint,
 
 	range: u32,
 	value: u32,
-	bit_count: u8
+	bit_count: u8,
 }
 
-impl<R: Reader> BoolReader<R> {
-	pub fn new(r: R) -> BoolReader<R> {
-		BoolReader {r: r, range: 0, value: 0, bit_count: 0}
+impl BoolReader {
+	pub fn new() -> BoolReader {
+		BoolReader {buf: ~[], range: 0, value: 0, bit_count: 0, index: 0}
 	}
 
-	pub fn init(&mut self) -> IoResult<()> {
-		let b = try!(self.r.read_be_u16());
+	pub fn init(&mut self, buf: ~[u8]) {
+                self.buf = buf;
+		self.value = 0;
 
-		self.value = b as u32;
+                for _ in range(0u, 2) {
+                        self.value = (self.value << 8) | self.buf[self.index] as u32;
+                        self.index += 1;
+                }
+
 		self.range = 255;
 		self.bit_count = 0;
-
-		Ok(())
 	}
 
-	pub fn read_bool(&mut self, probability: u8) -> IoResult<u8> {
+	pub fn read_bool(&mut self, probability: u8) -> u8 {
 		let split = 1 + (((self.range - 1) * probability as u32) >> 8);
 		let bigsplit = split << 8;
 
@@ -572,43 +616,42 @@ impl<R: Reader> BoolReader<R> {
 
 			if self.bit_count == 8 {
 				self.bit_count = 0;
-
-				let b = try!(self.r.read_u8());
-				self.value |= b as u32;
+                                self.value |= self.buf[self.index] as u32;
+                                self.index += 1;
 			}
 		}
 
-		Ok(retval)
+		retval
 	}
 
-	pub fn read_literal(&mut self, n: u8) -> IoResult<u8> {
-		let mut v = 0;
+	pub fn read_literal(&mut self, n: u8) -> u8 {
+		let mut v = 0u8;
 		let mut n = n;
 
-		while n != 0{
-			v = (v << 1) + try!(self.read_bool(128));
-
+		while n != 0 {
+			v = (v << 1) + self.read_bool(128u8);
 			n -= 1;
 		}
 
-		Ok(v)
+		v
 	}
 
-	pub fn read_magnitude_and_sign(&mut self, n: u8) -> IoResult<i32> {
-		let magnitude = try!(self.read_literal(n));
-		let sign = try!(self.read_literal(1));
+	pub fn read_magnitude_and_sign(&mut self, n: u8) -> i32 {
+		let magnitude = self.read_literal(n);
+		let sign = self.read_literal(1);
 
-		let v = if sign == 1 {-1 * magnitude as i32}
-			else {magnitude as i32};
-
-		Ok(v)
+		if sign == 1 {
+                        -1 * magnitude as i32
+                } else {
+                        magnitude as i32
+                }
 	}
 
-	pub fn read_with_tree(&mut self, tree: &[i8], probs: &[Prob]) -> IoResult<i8> {
+	pub fn read_with_tree(&mut self, tree: &[i8], probs: &[Prob]) -> i8 {
 		let mut index = 0;
 
 		loop {
-			let v = try!(self.read_bool(probs[index >> 1]));
+			let v = self.read_bool(probs[index >> 1]);
 			let v = index + v as i8;
 			index = tree[v as uint];
 
@@ -617,19 +660,30 @@ impl<R: Reader> BoolReader<R> {
 			}
 		}
 
-		Ok(-index)
+		-index
 	}
 
-	pub fn read_flag(&mut self) -> IoResult<bool> {
-		Ok(0 != try!(self.read_literal(1)))
+	pub fn read_flag(&mut self) -> bool {
+		0 != self.read_literal(1)
 	}
 }
 
-#[deriving(Default)]
 struct MacroBlock {
 	bpred: [i8, ..16],
-	luma_mode: i8,
+        complexity: [u8, ..9],
+        luma_mode: i8,
         chroma_mode: i8,
+}
+
+impl MacroBlock {
+        fn new() -> MacroBlock {
+                MacroBlock {
+                        bpred: [0i8, ..16],
+                        complexity: [0u8, ..9],
+                        luma_mode: 0,
+                        chroma_mode: 0,
+                }
+        }
 }
 
 #[deriving(Default)]
@@ -661,10 +715,15 @@ struct Segment {
 }
 
 struct VP8<R> {
-	b: BoolReader<R>,
+        r: R,
+	b: BoolReader,
+        p: BoolReader,
 
-	width: u16,
-	height: u16,
+	pub width: u16,
+	pub height: u16,
+
+        mbwidth: u16,
+        mbheight: u16,
 
 	frame: Frame,
 
@@ -676,21 +735,28 @@ struct VP8<R> {
 
 	token_probs: ~TokenProbTables,
 
-	top_macroblocks: ~[MacroBlock],
-	left_macroblock: MacroBlock,
+	top: ~[MacroBlock],
+	left: MacroBlock,
+
+        ybuf: ~[u8],
 }
 
 impl<R: Reader> VP8<R> {
 	pub fn new(r: R) -> VP8<R> {
 		let f: Frame = Default::default();
 		let s: Segment = Default::default();
-                let m: MacroBlock = Default::default();
+                let m = MacroBlock::new();
 
 		VP8 {
-			b: BoolReader::new(r),
+                        r: r,
+			b: BoolReader::new(),
+                        p: BoolReader::new(),
 
 			width: 0,
 			height: 0,
+
+                        mbwidth: 0,
+                        mbheight: 0,
 
 			frame: f,
 			segments_enabled: false,
@@ -701,88 +767,85 @@ impl<R: Reader> VP8<R> {
 			segment_tree_probs: [255u8, ..3],
 			token_probs: ~COEFF_PROBS,
 
-			top_macroblocks: ~[],
-			left_macroblock: m,
+			top: ~[],
+			left: m,
+
+                        ybuf: ~[],
 		}
 	}
 
-	fn update_token_probabilities(&mut self) -> IoResult<()> {
+	fn update_token_probabilities(&mut self) {
 		for i in range(0, 4) {
 			for j in range(0, 8) {
 				for k in range(0, 3) {
 					for t in range(0, NUM_DCT_TOKENS - 1) {
 						let prob = COEFF_UPDATE_PROBS[i][j][k][t];
-						let update = try!(self.b.read_bool(prob));
-						if update != 0 {
-							let v = try!(self.b.read_literal(8));
+						if self.b.read_bool(prob) != 0 {
+							let v = self.b.read_literal(8);
 							self.token_probs[i][j][k][t] = v as u8;
 						}
 					}
 				}
 			}
 		}
-
-		Ok(())
 	}
 
-	fn read_quantization_indices(&mut self) -> IoResult<()> {
-		let y_ac_qindex = try!(self.b.read_literal(7));
+	fn read_quantization_indices(&mut self) {
+		let y_ac_qindex = self.b.read_literal(7);
 		println!("Y AC index: {}", y_ac_qindex);
 
-		let y_dc_delta_present = try!(self.b.read_flag());
+		let y_dc_delta_present = self.b.read_flag();
 		let y_dc_qindex_delta = if y_dc_delta_present {
-			try!(self.b.read_magnitude_and_sign(4))
+			self.b.read_magnitude_and_sign(4)
 		} else {
 			0
 		};
 		println!("Y DC index delta: {}", y_dc_qindex_delta);
 
-		let y2_dc_delta_present = try!(self.b.read_flag());
+		let y2_dc_delta_present = self.b.read_flag();
 		let y2_dc_qindex_delta = if y2_dc_delta_present {
-			try!(self.b.read_magnitude_and_sign(4))
+			self.b.read_magnitude_and_sign(4)
 		} else {
 			0
 		};
 
 		println!("Y2 DC index delta: {}", y2_dc_qindex_delta);
 
-		let y2_ac_delta_present = try!(self.b.read_flag());
+		let y2_ac_delta_present = self.b.read_flag();
 		let y2_ac_qindex_delta = if y2_ac_delta_present {
-			try!(self.b.read_magnitude_and_sign(4))
+			self.b.read_magnitude_and_sign(4)
 		} else {
 			0
 		};
 
 		println!("Y2 AC index delta: {}", y2_ac_qindex_delta);
 
-		let uv_dc_delta_present = try!(self.b.read_flag());
+		let uv_dc_delta_present = self.b.read_flag();
 		let uv_dc_qindex_delta = if uv_dc_delta_present {
-			try!(self.b.read_magnitude_and_sign(4))
+			self.b.read_magnitude_and_sign(4)
 		} else {
 			0
 		};
 		println!("Chroma DC index delta: {}", uv_dc_qindex_delta);
 
-		let uv_ac_delta_present = try!(self.b.read_flag());
+		let uv_ac_delta_present = self.b.read_flag();
 		let uv_ac_qindex_delta = if uv_ac_delta_present {
-			try!(self.b.read_magnitude_and_sign(4))
+			self.b.read_magnitude_and_sign(4)
 		} else {
 			0
 		};
 
 		println!("Chroma AC index delta: {}", uv_ac_qindex_delta);
-
-		Ok(())
 	}
 
-	fn read_loop_filter_adjustments(&mut self) -> IoResult<()> {
-		let mode_ref_lf_delta_update = try!(self.b.read_flag());
+	fn read_loop_filter_adjustments(&mut self) {
+		let mode_ref_lf_delta_update = self.b.read_flag();
 		if mode_ref_lf_delta_update {
 			for i in range(0, 4) {
-				let ref_frame_delta_update_flag = try!(self.b.read_flag());
+				let ref_frame_delta_update_flag = self.b.read_flag();
 
 				let delta = if ref_frame_delta_update_flag {
-					try!(self.b.read_magnitude_and_sign(6))
+					self.b.read_magnitude_and_sign(6)
 				} else {
 					0
 				};
@@ -791,10 +854,10 @@ impl<R: Reader> VP8<R> {
 			}
 
 			for i in range(0, 4) {
-				let mb_mode_delta_update_flag = try!(self.b.read_flag());
+				let mb_mode_delta_update_flag = self.b.read_flag();
 
 				let delta = if mb_mode_delta_update_flag {
-					try!(self.b.read_magnitude_and_sign(6))
+					self.b.read_magnitude_and_sign(6)
 				} else {
 					0
 				};
@@ -802,33 +865,31 @@ impl<R: Reader> VP8<R> {
 				println!("\tmode delta update {0} - {1}", i, delta);
 			}
 		}
-
-		Ok(())
 	}
 
-	fn read_segment_updates(&mut self) -> IoResult<()> {
+	fn read_segment_updates(&mut self) {
 		//Section 9.3
-		self.segments_update_map = try!(self.b.read_flag());
-		let update_segment_feature_data = try!(self.b.read_flag());
+		self.segments_update_map = self.b.read_flag();
+		let update_segment_feature_data = self.b.read_flag();
 
 		if update_segment_feature_data {
-			self.segment_feature_mode = try!(self.b.read_flag());
+			self.segment_feature_mode = self.b.read_flag();
 
 			for i in range(0, MAX_SEGMENTS) {
-				let update = try!(self.b.read_flag());
+				let update = self.b.read_flag();
 
 				self.segment[i].quantizer_level = if update {
-					try!(self.b.read_magnitude_and_sign(7))
+					self.b.read_magnitude_and_sign(7)
 				} else {
 					0
 				} as i8;
 			}
 
 			for i in range(0, MAX_SEGMENTS) {
-				let update = try!(self.b.read_flag());
+				let update = self.b.read_flag();
 
 				self.segment[i].loopfilter_level = if update {
-					try!(self.b.read_magnitude_and_sign(6))
+					self.b.read_magnitude_and_sign(6)
 				} else {
 					0
 				} as i8;
@@ -837,88 +898,98 @@ impl<R: Reader> VP8<R> {
 
 		if self.segments_update_map {
 			for i in range(0, 3) {
-				let update = try!(self.b.read_flag());
+				let update = self.b.read_flag();
 
 		 		self.segment_tree_probs[i] = if update {
-					try!(self.b.read_literal(8))
+					self.b.read_literal(8)
 				} else {
 					255
 				} as u8;
 			}
 		}
-
-		Ok(())
 	}
 
 	fn read_frame_header(&mut self) -> IoResult<()> {
 		let mut tag = [0u8, ..3];
-		let _ = try!(self.b.r.read(tag));
+		let _ = try!(self.r.read(tag));
 
 		self.frame.keyframe = tag[0] & 1 == 0;
 		self.frame.version = (tag[0] >> 1) & 7;
 		self.frame.for_display = (tag[0] >> 4) & 1 != 0;
 
 		let first_partition_size = ((tag[2] as u32 << 16) | (tag[1] as u32 << 8) | tag[0] as u32) >> 5;
-		println!("first partition size {}", first_partition_size);
 
 		if self.frame.keyframe {
-			let _ = try!(self.b.r.read(tag));
+			let _ = try!(self.r.read(tag));
 			assert!(tag == [0x9d, 0x01, 0x2a]);
 
-			let w = try!(self.b.r.read_le_u16());
-			let h = try!(self.b.r.read_le_u16());
+			let w = try!(self.r.read_le_u16());
+			let h = try!(self.r.read_le_u16());
 
 			self.width = w & 0x3FFF;
 			self.height = h & 0x3FFF;
 
 			println!("width {0} height {1}", self.width, self.height);
-			self.top_macroblocks = init_top_macroblocks(self.width as uint);
-			self.left_macroblock = MacroBlock{..self.top_macroblocks[0]};
+			self.top = init_top_macroblocks(self.width as uint);
+			self.left = MacroBlock{..self.top[0]};
+
+                        self.mbwidth  = (self.width + 15) / 16;
+                        self.mbheight = (self.height + 15) / 16;
+
+                        self.width += 16;
+                        self.height += 16;
+
+                        println!("mbwidth {0} mbheight {1}", self.mbwidth, self.mbheight);
+                        self.ybuf = slice::from_elem(self.width as uint * self.height as uint, 0u8);
 		}
 
+                let buf = try!(self.r.read_exact(first_partition_size as uint));
 		//initialise binary decoder
-		let _ = try!(self.b.init());
+		self.b.init(buf);
 
 		if self.frame.keyframe {
-			let color_space = try!(self.b.read_literal(1));
-			self.frame.pixel_type = try!(self.b.read_literal(1));
+			let color_space = self.b.read_literal(1);
+			self.frame.pixel_type = self.b.read_literal(1);
 			assert!(color_space == 0);
 		}
 
-		self.segments_enabled = try!(self.b.read_flag());
+		self.segments_enabled = self.b.read_flag();
 		if self.segments_enabled {
-			let _ = try!(self.read_segment_updates());
+			self.read_segment_updates();
 		}
 
-		self.frame.filter          = try!(self.b.read_literal(1));
-		self.frame.filter_level    = try!(self.b.read_literal(6));
-		self.frame.sharpness_level = try!(self.b.read_literal(3));
+		self.frame.filter          = self.b.read_literal(1);
+		self.frame.filter_level    = self.b.read_literal(6);
+		self.frame.sharpness_level = self.b.read_literal(3);
 
-		let lf_adjust_enable = try!(self.b.read_flag());
+		let lf_adjust_enable = self.b.read_flag();
 		if lf_adjust_enable {
-			let _ = try!(self.read_loop_filter_adjustments());
+			self.read_loop_filter_adjustments();
 		}
 
-		let num_partitions = 1 << try!(self.b.read_literal(2));
+		let num_partitions = 1 << self.b.read_literal(2);
 		if num_partitions > 1 {
 			fail!("read partition sizes");
 		}
 
-		let _ = try!(self.read_quantization_indices());
+                let buf = try!(self.r.read_to_end());
+                self.p.init(buf);
+
+		self.read_quantization_indices();
 
 		if !self.frame.keyframe {
 			//9.7 refresh golden frame and altref frame
 			fail!("unimplemented")
 		} else {
 			//Refresh entropy probs ?????
-			let _ = try!(self.b.read_literal(1));
+			let _ = self.b.read_literal(1);
 		}
 
-		let _ = try!(self.update_token_probabilities());
+		self.update_token_probabilities();
 
-		let mb_no_skip_coeff = try!(self.b.read_literal(1));
+		let mb_no_skip_coeff = self.b.read_literal(1);
 		self.frame.prob_skip_false = if mb_no_skip_coeff == 1 {
-			Some(try!(self.b.read_literal(8)))
+			Some(self.b.read_literal(8))
 		} else {
 			None
 		};
@@ -933,28 +1004,26 @@ impl<R: Reader> VP8<R> {
 		Ok(())
 	}
 
-	pub fn read_macroblock_header(&mut self, mbx: uint) -> IoResult<MacroBlock> {
-                let mut mb: MacroBlock = Default::default();
+	fn read_macroblock_header(&mut self, mbx: uint) -> MacroBlock {
+                let mut mb = MacroBlock::new();
 
 		if self.segments_enabled && self.segments_update_map {
-			let segment_id = try!(self.b.read_with_tree(SEGMENT_ID_TREE,
-								    self.segment_tree_probs));
-			println!("segment id: {}", segment_id);
+			let segment_id = self.b.read_with_tree(SEGMENT_ID_TREE, self.segment_tree_probs);
+			println!("\tsegment id: {}", segment_id);
 		}
 
 		let skip_coeff = if self.frame.prob_skip_false.is_some() {
-			1 == try!(self.b.read_bool(*self.frame.prob_skip_false
-							      .get_ref()))
+			1 == self.b.read_bool(*self.frame.prob_skip_false.get_ref())
 		} else {
 			false
 		};
 
 		if skip_coeff {
-			println!("macro block has no non-zero coeffs");
-		}
+                        println!("\tmacro block has no non-zero coeffs");
+                }
 
 		let inter_predicted = if !self.frame.keyframe {
-			1 == try!(self.b.read_bool(self.frame.prob_intra))
+			1 == self.b.read_bool(self.frame.prob_intra)
 		} else {
 			false
 		};
@@ -965,91 +1034,123 @@ impl<R: Reader> VP8<R> {
 
 		if self.frame.keyframe {
 			//intra preditcion
-			mb.luma_mode = try!(self.b.read_with_tree(KEYFRAME_YMODE_TREE,
-			                                          KEYFRAME_YMODE_PROBS));
-			println!("ymode: {}", mb.luma_mode);
-
+			mb.luma_mode = self.b.read_with_tree(KEYFRAME_YMODE_TREE,
+			                                     KEYFRAME_YMODE_PROBS);
 			if mb.luma_mode == B_PRED {
 				for y in range(0, 4) {
 					for x in range(0, 4) {
-						let top  = self.top_macroblocks[mbx - 1].bpred[x];
-						let left = self.left_macroblock.bpred[y];
-						let bmode = try!(self.b.read_with_tree(KEYFRAME_BPRED_MODE_TREE,
-										       KEYFRAME_BPRED_MODE_PROBS[top][left]));
-						println!("\tbmode: {}", bmode);
+						let top   = self.top[mbx].bpred[12 + x];
+						let left  = self.left.bpred[y];
+						let bmode = self.b.read_with_tree(KEYFRAME_BPRED_MODE_TREE,
+										  KEYFRAME_BPRED_MODE_PROBS[top][left]);
                                                 mb.bpred[x + y * 4] = bmode;
 
-						self.top_macroblocks[mbx - 1].bpred[x] = bmode;
-						self.left_macroblock.bpred[y * 4 + x] = bmode;
+						self.top[mbx].bpred[12 + x] = bmode;
+						self.left.bpred[y] = bmode;
 					}
 				}
-			}
+			} else {
+                                for i in range(0, 4) {
+                                        let mode = match mb.luma_mode {
+                                                DC_PRED => B_DC_PRED,
+                                                V_PRED  => B_VE_PRED,
+                                                H_PRED  => B_HE_PRED,
+                                                TM_PRED => B_TM_PRED,
+                                                _       => fail!("  dfsdfas")
+                                        };
 
-			mb.chroma_mode = try!(self.b.read_with_tree(KEYFRAME_UV_MODE_TREE,
-			                                            KEYFRAME_UV_MODE_PROBS));
-			println!("uvmode: {}", mb.chroma_mode);
+                                        mb.bpred[12 + i] = mode;
+                                        self.left.bpred[i] = mode;
+                                }
+                        }
+
+			mb.chroma_mode = self.b.read_with_tree(KEYFRAME_UV_MODE_TREE,
+			                                       KEYFRAME_UV_MODE_PROBS);
 		}
 
-		Ok(mb)
+		mb
 	}
 
-        fn intra_predict(&mut self, mbx: uint, mby: uint, mb: MacroBlock) {
+        fn intra_predict(&mut self, mbx: uint, mby: uint, mb: &MacroBlock) {
                 let mut ws = [127u8, .. (1 + 16) * (1 + 16 + 4)];
-                let stride = 1 + 16 + 4;
+                let stride = 1u + 16 + 4;
+                let w = self.width as uint;
 
                 //A
                 if mby == 0 {
-                        for i in range(0, 16 + 4) {
+                        for i in range(0u, 16 + 4) {
                                 ws[i + 1] = 127;
                         }
-                } else if mbx < self.mbwidth - 1 {
-                        for i in range(0, 16 + 4) {
-                                ws[i + 1] = self.ybuf[(mby * 16) * stride + mbx * 16 + i];
+                } else if mbx < self.mbwidth as uint - 1 {
+                        for i in range(0u, 16 + 4) {
+                                ws[i + 1] = self.ybuf[(mby * 16 - 1) * w + mbx * 16 + i];
                         }
-                } else {
-                        for i in range(0, 16) {
-                                ws[i + 1] = self.ybuf[(mby * 16) * stride + mbx * 16 + i];
+                } else if mbx == self.mbwidth as uint - 1 {
+                        for i in range(0u, 16) {
+                                ws[i + 1] = self.ybuf[(mby * 16 - 1) * w + mbx * 16 + i];
                         }
 
-                        for i in range(16, 20) {
+                        for i in range(16u, 20) {
                                 ws[i + 1] = 127;
                         }
                 }
 
                 //L
                 if mbx == 0 {
-                        for i in range(1, 17) {
-                               ws[i * (1 + 16 + 4)] = 129;
+                        for i in range(1u, 17) {
+                               ws[i * stride] = 129;
                         }
                 } else {
-                        for i in range(0, 16) {
-                                left[i] = self.ybuf[(mby * 16 + i) * stride + mbx * 16];
+                        for i in range(1u, 17) {
+                                ws[i * stride] = self.ybuf[(mby * 16 + i - 1) * w + mbx * 16 - 1];
                         }
                 }
 
                 //P
                 ws[0] = if mby == 0 && mbx == 0 {
-                        129
-                } else if mbx == 0 {
                         127
+                } else if mby == 0 && mbx != 0 {
+                        127
+                } else if mbx == 0 && mby != 0 {
+                        129
                 } else {
-                        self.ybuf[mby * 16 * stride + mbx * 16 - 1];
+                        self.ybuf[(mby * 16 - 1) * w + mbx * 16 - 1]
                 };
 
                 match mb.luma_mode {
                         V_PRED  => predict_VPRED(ws, 16, 1, 1, stride),
                         H_PRED  => predict_HPRED(ws, 16, 1, 1, stride),
                         TM_PRED => predict_TMPRED(ws, 16, 1, 1, stride),
-                        DC_PRED => predict_DCPRED(ws, 16, 1, 1, stride, mby == 0, mbx == 0),
+                        DC_PRED => predict_DCPRED(ws, 16, stride, mby != 0, mbx != 0),
                         B_PRED  => predict_4x4(ws, stride, mb.bpred),
                         _       => fail!("unknown intra prediction mode")
                 }
+
+                for y in range(0u, 16) {
+                        for x in range(0u, 16) {
+                                self.ybuf[(mby * 16 + y) * w + mbx * 16 + x] = ws[(1 + y) * stride + 1 + x];
+                        }
+                }
         }
 
-	pub fn decode(&mut self) -> IoResult<()> {
+	pub fn decode(&mut self) -> IoResult<~[u8]> {
 		let _ = try!(self.read_frame_header());
 
-		self.read_macroblock_header()
+		for mby in range(0, self.mbheight as uint) {
+                        self.left = MacroBlock::new();
+
+                        for mbx in range(0, self.mbwidth as uint) {
+                                println!("mbx: {0} mby: {1}", mbx, mby);
+
+                                let mb = self.read_macroblock_header(mbx);
+
+                                let _ = self.intra_predict(mbx, mby, &mb);
+
+                                self.top[mbx] = mb;
+                        }
+                }
+
+                Ok(self.ybuf.clone())
 	}
 }
 
@@ -1059,7 +1160,8 @@ fn init_top_macroblocks(width: uint) -> ~[MacroBlock] {
 	let mb = MacroBlock {
 		//Section 11.3 #3
 		bpred: [B_DC_PRED, ..16],
-		luma_mode: DC_PRED
+		luma_mode: DC_PRED,
+                ..MacroBlock::new()
 	};
 
 	slice::from_fn(mb_width + 2, |_| mb)
@@ -1082,12 +1184,12 @@ fn clip(a: i16) -> u8 {
 }
 
 fn predict_4x4(ws: &mut [u8], stride: uint, modes: &[i8]) {
-        for sby in range(0, 4) {
-                for sbx in range(0, 4) {
-                        match mode[sbx + sby * 4] {
-                                B_TM_PRED => predict_BTMPRED(ws, 4, sbx * 4 + 1, sby * 4 + 1, stride),
-                                B_VE_PRED => predict_BVEPRED(ws, 4, sbx * 4 + 1, sby * 4 + 1, stride),
-                                B_HE_PRED => predict_BHEPRED(ws, 4, sbx * 4 + 1, sby * 4 + 1, stride),
+        for sby in range(0u, 4) {
+                for sbx in range(0u, 4) {
+                        match modes[sbx + sby * 4] {
+                                B_TM_PRED => predict_TMPRED(ws, 4, sbx * 4 + 1, sby * 4 + 1, stride),
+                                B_VE_PRED => predict_BVEPRED(ws, sbx * 4 + 1, sby * 4 + 1, stride),
+                                B_HE_PRED => predict_BHEPRED(ws, sbx * 4 + 1, sby * 4 + 1, stride),
                                 B_DC_PRED => predict_BDCPRED(ws, sbx * 4 + 1, sby * 4 + 1, stride),
                                 B_LD_PRED => predict_BLDPRED(ws, sbx * 4 + 1, sby * 4 + 1, stride),
                                 B_RD_PRED => predict_BRDPRED(ws, sbx * 4 + 1, sby * 4 + 1, stride),
@@ -1102,16 +1204,16 @@ fn predict_4x4(ws: &mut [u8], stride: uint, modes: &[i8]) {
 }
 
 fn predict_VPRED(a: &mut [u8], size: uint, x0: uint, y0: uint, stride: uint) {
-        for y in range(0, size) {
-                for x in range(0, size) {
+        for y in range(0u, size) {
+                for x in range(0u, size) {
                         a[(x + x0) + stride * (y + y0)] = a[(x + x0) + stride * (y0 + y - 1)];
                 }
         }
 }
 
 fn predict_HPRED(a: &mut [u8], size: uint, x0: uint, y0: uint, stride: uint) {
-        for y in range(0, size) {
-                for x in range(0, size) {
+        for y in range(0u, size) {
+                for x in range(0u, size) {
                         a[(x + x0) + stride * (y + y0)] = a[(x + x0 - 1) + stride * (y0 + y)];
                 }
         }
@@ -1122,16 +1224,16 @@ fn predict_DCPRED(a: &mut [u8], size: uint, stride: uint, above: bool, left: boo
         let mut shf = if size == 8 {2} else {3};
 
         if left {
-                for y in range(0, size) {
-                        sum += a[(y + 1) * stride];
+                for y in range(0u, size) {
+                        sum += a[(y + 1) * stride] as u16;
                 }
 
                 shf += 1;
         }
 
         if above {
-                for x in range(0, size) {
-                        sum += a[x + 1];
+                for x in range(0u, size) {
+                        sum += a[x + 1] as u16;
                 }
 
                 shf += 1;
@@ -1143,33 +1245,35 @@ fn predict_DCPRED(a: &mut [u8], size: uint, stride: uint, above: bool, left: boo
                 (sum + (1 << (shf - 1))) >> shf
         };
 
-        for y in range(0, size) {
-                for x in range(0, size) {
+        for y in range(0u, size) {
+                for x in range(0u, size) {
                         a[(x + 1) + stride * (y + 1)] = dcval as u8;
                 }
         }
 }
 
 fn predict_TMPRED(a: &mut [u8], size: uint, x0: uint, y0: uint, stride: uint) {
-        for y in range(0, size) {
-                for x in range(0, size) {
-                        let pred = a[WSTRIDE * (y + 1)] as i16 + a[x + 1] as i16 - a[0] as i16;
-                        a[(x + x0) + WSTRIDE * (y + y0)] = clip(pred);
+        for y in range(0u, size) {
+                for x in range(0u, size) {
+                        let pred = a[(y0 + y) * stride + x0 - 1] as i16 +
+                                   a[(y0 - 1) * stride + x0 + x] as i16 -
+                                   a[(y0 - 1) * stride + x0 - 1] as i16;
+                        a[(x + x0) + stride * (y + y0)] = clip(pred);
                 }
         }
 }
 
 fn predict_BDCPRED(a: &mut [u8], x0: uint, y0: uint, stride: uint) {
         let mut v = 0;
-        for i in range(0, 4) {
+        for i in range(0u, 4) {
                 v += a[(y0 + i) * stride + x0 - 1] as u16 +
                      a[(y0 - 1) * stride + x0 + i] as u16;
         }
 
         v >>= 3;
 
-        for y in range(0, 4) {
-                for x in range(0, 4) {
+        for y in range(0u, 4) {
+                for x in range(0u, 4) {
                         a[x + x0 + stride * (y + y0)] = v as u8;
                 }
         }
@@ -1243,11 +1347,20 @@ fn predict_BLDPRED(a: &mut [u8], x0: uint, y0: uint, stride: uint) {
         let a7 = a[(y0 - 1) * stride + x0 + 7];
 
         a[(y0 + 0) * stride + x0 + 0] = avg3(a0, a1, a2);
-        a[(y0 + 0) * stride + x0 + 1] = a[(y0 + 1) * stride + x0 + 0] = avg3p(a1, a2, a3);
-        a[(y0 + 0) * stride + x0 + 2] = a[(y0 + 1) * stride + x0 + 1] = a[(y0 + 2) * stride + x0 + 0] = avg3(a2, a3, a4);
-        a[(y0 + 0) * stride + x0 + 3] = a[(y0 + 1) * stride + x0 + 2] = a[(y0 + 2) * stride + x0 + 1] = a[(y0 + 3) * stride + x0 + 0] = avg3(a3, a4, a5);
-        a[(y0 + 1) * stride + x0 + 3] = a[(y0 + 2) * stride + x0 + 2] = a[(y0 + 3) * stride + x0 + 1] = avg3(a4, a5, a6);
-        a[(y0 + 2) * stride + x0 + 3] = a[(y0 + 3) * stride + x0 + 2] = avg3(a5, a6, a7);
+        a[(y0 + 0) * stride + x0 + 1] = avg3(a1, a2, a3);
+        a[(y0 + 1) * stride + x0 + 0] = avg3(a1, a2, a3);
+        a[(y0 + 0) * stride + x0 + 2] = avg3(a2, a3, a4);
+        a[(y0 + 1) * stride + x0 + 1] = avg3(a2, a3, a4);
+        a[(y0 + 2) * stride + x0 + 0] = avg3(a2, a3, a4);
+        a[(y0 + 0) * stride + x0 + 3] = avg3(a3, a4, a5);
+        a[(y0 + 1) * stride + x0 + 2] = avg3(a3, a4, a5);
+        a[(y0 + 2) * stride + x0 + 1] = avg3(a3, a4, a5);
+        a[(y0 + 3) * stride + x0 + 0] = avg3(a3, a4, a5);
+        a[(y0 + 1) * stride + x0 + 3] = avg3(a4, a5, a6);
+        a[(y0 + 2) * stride + x0 + 2] = avg3(a4, a5, a6);
+        a[(y0 + 3) * stride + x0 + 1] = avg3(a4, a5, a6);
+        a[(y0 + 2) * stride + x0 + 3] = avg3(a5, a6, a7);
+        a[(y0 + 3) * stride + x0 + 2] = avg3(a5, a6, a7);
         a[(y0 + 3) * stride + x0 + 3] = avg3(a6, a7, a7);
 }
 
@@ -1263,11 +1376,20 @@ fn predict_BRDPRED(a: &mut [u8], x0: uint, y0: uint, stride: uint) {
         let e0 = a[(y0 + 3) * stride + x0 - 1];
 
         a[(y0 + 3) * stride + x0 + 0] = avg3(e0, e1, e2);
-        a[(y0 + 3) * stride + x0 + 1] = a[(y0 + 2) * stride + x0 + 0] = avg3(e1, e2, e3);
-        a[(y0 + 3) * stride + x0 + 2] = a[(y0 + 2) * stride + x0 + 1] = a[(y0 + 1) * stride + x0 + 0] = avg3(e2, e3, e4);
-        a[(y0 + 3) * stride + x0 + 3] = a[(y0 + 2) * stride + x0 + 2] = a[(y0 + 1) * stride + x0 + 1] = a[(y0 + 0) * stride + x0 + 0] = avg3(e3, e4, e5);
-        a[(y0 + 2) * stride + x0 + 3] = a[(y0 + 1) * stride + x0 + 2] = a[(y0 + 0) * stride + x0 + 1] = avg3(e4, e5, e6);
-        a[(y0 + 1) * stride + x0 + 3] = a[(y0 + 0) * stride + x0 + 2] = avg3(e5, e6, e7);
+        a[(y0 + 3) * stride + x0 + 1] = avg3(e1, e2, e3);
+        a[(y0 + 2) * stride + x0 + 0] = avg3(e1, e2, e3);
+        a[(y0 + 3) * stride + x0 + 2] = avg3(e2, e3, e4);
+        a[(y0 + 2) * stride + x0 + 1] = avg3(e2, e3, e4);
+        a[(y0 + 1) * stride + x0 + 0] = avg3(e2, e3, e4);
+        a[(y0 + 3) * stride + x0 + 3] = avg3(e3, e4, e5);
+        a[(y0 + 2) * stride + x0 + 2] = avg3(e3, e4, e5);
+        a[(y0 + 1) * stride + x0 + 1] = avg3(e3, e4, e5);
+        a[(y0 + 0) * stride + x0 + 0] = avg3(e3, e4, e5);
+        a[(y0 + 2) * stride + x0 + 3] = avg3(e4, e5, e6);
+        a[(y0 + 1) * stride + x0 + 2] = avg3(e4, e5, e6);
+        a[(y0 + 0) * stride + x0 + 1] = avg3(e4, e5, e6);
+        a[(y0 + 1) * stride + x0 + 3] = avg3(e5, e6, e7);
+        a[(y0 + 0) * stride + x0 + 2] = avg3(e5, e6, e7);
         a[(y0 + 0) * stride + x0 + 3] = avg3(e6, e7, e8);
 }
 
@@ -1280,16 +1402,21 @@ fn predict_BVRPRED(a: &mut [u8], x0: uint, y0: uint, stride: uint) {
         let e3 = a[(y0 + 0) * stride + x0 - 1];
         let e2 = a[(y0 + 1) * stride + x0 - 1];
         let e1 = a[(y0 + 2) * stride + x0 - 1];
-        let e0 = a[(y0 + 3) * stride + x0 - 1];
 
         a[(y0 + 3) * stride + x0 + 0] = avg3(e1, e2, e3);
         a[(y0 + 2) * stride + x0 + 0] = avg3(e2, e3, e4);
-        a[(y0 + 3) * stride + x0 + 1] = a[(y0 + 1) * stride + x0 + 0] = avg3(e3, e4, e5);
-        a[(y0 + 2) * stride + x0 + 1] = a[(y0 + 0) * stride + x0 + 0] = avg2(e4, e5);
-        a[(y0 + 3) * stride + x0 + 2] = a[(y0 + 1) * stride + x0 + 1] = avg3(e4, e5, e6);
-        a[(y0 + 2) * stride + x0 + 2] = a[(y0 + 0) * stride + x0 + 1] = avg2(e5, e6);
-        a[(y0 + 3) * stride + x0 + 3] = a[(y0 + 1) * stride + x0 + 2] = avg3(e5, e6, e7);
-        a[(y0 + 2) * stride + x0 + 3] = a[(y0 + 0) * stride + x0 + 2] = avg2(e6, e7);
+        a[(y0 + 3) * stride + x0 + 1] = avg3(e3, e4, e5);
+        a[(y0 + 1) * stride + x0 + 0] = avg3(e3, e4, e5);
+        a[(y0 + 2) * stride + x0 + 1] = avg2(e4, e5);
+        a[(y0 + 0) * stride + x0 + 0] = avg2(e4, e5);
+        a[(y0 + 3) * stride + x0 + 2] = avg3(e4, e5, e6);
+        a[(y0 + 1) * stride + x0 + 1] = avg3(e4, e5, e6);
+        a[(y0 + 2) * stride + x0 + 2] = avg2(e5, e6);
+        a[(y0 + 0) * stride + x0 + 1] = avg2(e5, e6);
+        a[(y0 + 3) * stride + x0 + 3] = avg3(e5, e6, e7);
+        a[(y0 + 1) * stride + x0 + 2] = avg3(e5, e6, e7);
+        a[(y0 + 2) * stride + x0 + 3] = avg2(e6, e7);
+        a[(y0 + 0) * stride + x0 + 2] = avg2(e6, e7);
         a[(y0 + 1) * stride + x0 + 3] = avg3(e6, e7, e8);
         a[(y0 + 0) * stride + x0 + 3] = avg2(e7, e8);
 }
@@ -1305,19 +1432,24 @@ fn predict_BVLPRED(a: &mut [u8], x0: uint, y0: uint, stride: uint) {
         let a7 = a[(y0 - 1) * stride + x0 + 7];
 
         a[(y0 + 0) * stride + x0 + 0] = avg2(a0, a1);
-        a[(y0 + 1) * stride + x0 + 0] = avg3(e0, e1, e2);
-        a[(y0 + 2) * stride + x0 + 0] = a[(y0 + 0) * stride + x0 + 1] = avg2(a1, a2);
-        a[(y0 + 1) * stride + x0 + 1] = a[(y0 + 3) * stride + x0 + 0] = avg3(e1, e2, e3);
-        a[(y0 + 2) * stride + x0 + 1] = a[(y0 + 0) * stride + x0 + 2] = avg2(a2, a3);
-        a[(y0 + 3) * stride + x0 + 1] = a[(y0 + 1) * stride + x0 + 2] = avg3(e2, e3, e4);
-        a[(y0 + 2) * stride + x0 + 2] = a[(y0 + 0) * stride + x0 + 3] = avg2(a3, a4);
-        a[(y0 + 3) * stride + x0 + 2] = a[(y0 + 1) * stride + x0 + 3] = avg3(e3, e4, e5);
-        a[(y0 + 2) * stride + x0 + 3] = avg3(e4, e5, e6);
+        a[(y0 + 1) * stride + x0 + 0] = avg3(a0, a1, a2);
+        a[(y0 + 2) * stride + x0 + 0] = avg2(a1, a2);
+        a[(y0 + 0) * stride + x0 + 1] = avg2(a1, a2);
+        a[(y0 + 1) * stride + x0 + 1] = avg3(a1, a2, a3);
+        a[(y0 + 3) * stride + x0 + 0] = avg3(a1, a2, a3);
+        a[(y0 + 2) * stride + x0 + 1] = avg2(a2, a3);
+        a[(y0 + 0) * stride + x0 + 2] = avg2(a2, a3);
+        a[(y0 + 3) * stride + x0 + 1] = avg3(a2, a3, a4);
+        a[(y0 + 1) * stride + x0 + 2] = avg3(a2, a3, a4);
+        a[(y0 + 2) * stride + x0 + 2] = avg2(a3, a4);
+        a[(y0 + 0) * stride + x0 + 3] = avg2(a3, a4);
+        a[(y0 + 3) * stride + x0 + 2] = avg3(a3, a4, a5);
+        a[(y0 + 1) * stride + x0 + 3] = avg3(a3, a4, a5);
+        a[(y0 + 2) * stride + x0 + 3] = avg3(a4, a5, a6);
         a[(y0 + 3) * stride + x0 + 3] = avg3(a5, a6, a7);
 }
 
 fn predict_BHDPRED(a: &mut [u8], x0: uint, y0: uint, stride: uint) {
-        let e8 = a[(y0 - 1) * stride + x0 + 3];
         let e7 = a[(y0 - 1) * stride + x0 + 2];
         let e6 = a[(y0 - 1) * stride + x0 + 1];
         let e5 = a[(y0 - 1) * stride + x0 + 0];
@@ -1329,12 +1461,18 @@ fn predict_BHDPRED(a: &mut [u8], x0: uint, y0: uint, stride: uint) {
 
         a[(y0 + 3) * stride + x0 + 0] = avg2(e0, e1);
         a[(y0 + 3) * stride + x0 + 1] = avg3(e0, e1, e2);
-        a[(y0 + 2) * stride + x0 + 0] = a[(y0 + 3) * stride + x0 + 2] = avg2(e1, e2);
-        a[(y0 + 2) * stride + x0 + 1] = a[(y0 + 3) * stride + x0 + 3] = avg3(e1, e2, e3);
-        a[(y0 + 2) * stride + x0 + 2] = a[(y0 + 1) * stride + x0 + 0] = avg2(e2, e3);
-        a[(y0 + 2) * stride + x0 + 3] = a[(y0 + 1) * stride + x0 + 1] = avg3(e2, e3, e4);
-        a[(y0 + 1) * stride + x0 + 2] = a[(y0 + 0) * stride + x0 + 0] = avg2(e3, e4);
-        a[(y0 + 1) * stride + x0 + 3] = a[(y0 + 0) * stride + x0 + 1] = avg3(e3, e4, e5);
+        a[(y0 + 2) * stride + x0 + 0] = avg2(e1, e2);
+        a[(y0 + 3) * stride + x0 + 2] = avg2(e1, e2);
+        a[(y0 + 2) * stride + x0 + 1] = avg3(e1, e2, e3);
+        a[(y0 + 3) * stride + x0 + 3] = avg3(e1, e2, e3);
+        a[(y0 + 2) * stride + x0 + 2] = avg2(e2, e3);
+        a[(y0 + 1) * stride + x0 + 0] = avg2(e2, e3);
+        a[(y0 + 2) * stride + x0 + 3] = avg3(e2, e3, e4);
+        a[(y0 + 1) * stride + x0 + 1] = avg3(e2, e3, e4);
+        a[(y0 + 1) * stride + x0 + 2] = avg2(e3, e4);
+        a[(y0 + 0) * stride + x0 + 0] = avg2(e3, e4);
+        a[(y0 + 1) * stride + x0 + 3] = avg3(e3, e4, e5);
+        a[(y0 + 0) * stride + x0 + 1] = avg3(e3, e4, e5);
         a[(y0 + 0) * stride + x0 + 2] = avg3(e4, e5, e6);
         a[(y0 + 0) * stride + x0 + 3] = avg3(e5, e6, e7);
 }
@@ -1347,9 +1485,18 @@ fn predict_BHUPRED(a: &mut [u8], x0: uint, y0: uint, stride: uint) {
 
         a[(y0 + 0) * stride + x0 + 0] = avg2(l0, l1);
         a[(y0 + 0) * stride + x0 + 1] = avg3(l0, l1, l2);
-        a[(y0 + 0) * stride + x0 + 2] = a[(y0 + 1) * stride + x0 + 0] = avg2(l1, l2);
-        a[(y0 + 0) * stride + x0 + 3] = a[(y0 + 1) * stride + x0 + 1] = avg3(l1, l2, l3);
-        a[(y0 + 1) * stride + x0 + 2] = a[(y0 + 2) * stride + x0 + 0] = avg2(l2, l3);
-        a[(y0 + 1) * stride + x0 + 3] = a[(y0 + 2) * stride + x0 + 1] = avg3(l2, l3, l3);
-        a[(y0 + 2) * stride + x0 + 2] = a[(y0 + 2) * stride + x0 + 3] = a[(y0 + 3) * stride + x0 + 0] = a[(y0 + 3) * stride + x0 + 1] = a[(y0 + 3) * stride + x0 + 2] = a[(y0 + 3) * stride + x0 + 3] = l3;
+        a[(y0 + 0) * stride + x0 + 2] = avg2(l1, l2);
+        a[(y0 + 1) * stride + x0 + 0] = avg2(l1, l2);
+        a[(y0 + 0) * stride + x0 + 3] = avg3(l1, l2, l3);
+        a[(y0 + 1) * stride + x0 + 1] = avg3(l1, l2, l3);
+        a[(y0 + 1) * stride + x0 + 2] = avg2(l2, l3);
+        a[(y0 + 2) * stride + x0 + 0] = avg2(l2, l3);
+        a[(y0 + 1) * stride + x0 + 3] = avg3(l2, l3, l3);
+        a[(y0 + 2) * stride + x0 + 1] = avg3(l2, l3, l3);
+        a[(y0 + 2) * stride + x0 + 2] = l3;
+        a[(y0 + 2) * stride + x0 + 3] = l3;
+        a[(y0 + 3) * stride + x0 + 0] = l3;
+        a[(y0 + 3) * stride + x0 + 1] = l3;
+        a[(y0 + 3) * stride + x0 + 2] = l3;
+        a[(y0 + 3) * stride + x0 + 3] = l3;
 }
