@@ -882,12 +882,11 @@ impl<R: Reader> VP8<R> {
 	}
 
 	fn read_loop_filter_adjustments(&mut self) {
-		let mode_ref_lf_delta_update = self.b.read_flag();
-		if mode_ref_lf_delta_update {
+		if self.b.read_flag() {
 			for i in range(0, 4) {
 				let ref_frame_delta_update_flag = self.b.read_flag();
 
-				let delta = if ref_frame_delta_update_flag {
+				let _delta = if ref_frame_delta_update_flag {
 					self.b.read_magnitude_and_sign(6)
 				} else {
 					0
@@ -897,7 +896,7 @@ impl<R: Reader> VP8<R> {
 			for i in range(0, 4) {
 				let mb_mode_delta_update_flag = self.b.read_flag();
 
-				let delta = if mb_mode_delta_update_flag {
+				let _delta = if mb_mode_delta_update_flag {
 					self.b.read_magnitude_and_sign(6)
 				} else {
 					0
