@@ -66,7 +66,6 @@ pub mod fast {
 	assumed by the product vendor.
 */
 	static CONST_BITS: i32 = 13;
-
 	static PASS1_BITS: i32 = 2;
 
 	static FIX_0_298631336: i32 = 2446;
@@ -83,9 +82,9 @@ pub mod fast {
 	static FIX_3_072711026: i32 = 25172;
 
 	pub fn fdct(samples: &[u8], coeffs: &mut [i32]) {
-	 	//Pass 1: process rows.
-	 	//Results are scaled by sqrt(8) compared to a true DCT
-	 	//furthermore we scale the results by 2**PASS1_BITS
+		//Pass 1: process rows.
+		//Results are scaled by sqrt(8) compared to a true DCT
+		//furthermore we scale the results by 2**PASS1_BITS
 	    for y in range(0, 8) {
 	        let y0 = y * 8;
 
@@ -425,13 +424,3 @@ pub mod slow {
 		}
 	}
 }
-
-/*fn print_block<N: Num + ::std::fmt::Show>(a: &[N]) {
-	for y in range(0, 8) {
-		for x in range(0, 8) {
-			print!("{:>5} ", a[y * 8 + x]);
-		}
-
-		println!("");
-	}
-}*/
