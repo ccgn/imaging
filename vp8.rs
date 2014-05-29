@@ -769,7 +769,6 @@ struct Segment {
 struct VP8<R> {
         r: R,
 	b: BoolReader,
-        p: BoolReader,
 
 	pub width: u16,
 	pub height: u16,
@@ -782,9 +781,12 @@ struct VP8<R> {
 	segments_enabled: bool,
 	segments_update_map: bool,
 	segment: [Segment, ..MAX_SEGMENTS],
-	segment_tree_probs: [Prob, ..3],
 
-	token_probs: ~TokenProbTables,
+        partitions: [BoolReader, ..8],
+        num_partitions: u8,
+
+        segment_tree_probs: [Prob, ..3],
+        token_probs: ~TokenProbTables,
 
 	top: ~[MacroBlock],
 	left: MacroBlock,
@@ -801,7 +803,6 @@ impl<R: Reader> VP8<R> {
 		VP8 {
                         r: r,
 			b: BoolReader::new(),
-                        p: BoolReader::new(),
 
 			width: 0,
 			height: 0,
@@ -813,6 +814,12 @@ impl<R: Reader> VP8<R> {
 			segments_enabled: false,
 			segments_update_map: false,
 			segment: [s, ..MAX_SEGMENTS],
+
+                        partitions: [BoolReader::new(), BoolReader::new(),
+                                     BoolReader::new(), BoolReader::new(),
+                                     BoolReader::new(), BoolReader::new(),
+                                     BoolReader::new(), BoolReader::new(),],
+                        num_partitions: 1,
 
 			segment_tree_probs: [255u8, ..3],
 			token_probs: ~COEFF_PROBS,
@@ -839,6 +846,22 @@ impl<R: Reader> VP8<R> {
 			}
 		}
 	}
+
+        fn init_partitions(&mut self, n: uint) -> IoResult<()> {
+                let sizes = try!(self.r.read_exact(3 * n - 3));
+
+                for (i, s) in sizes.chunks(3).enumerate() {
+                        let size = s[1] as u32 + (s[2] as u32 << 8) + (s[3] as u32 << 8);
+                        let buf  = try!(self.r.read_exact(size as uint));
+
+                        self.partitions[i].init(buf);
+                }
+
+                let buf = try!(self.r.read_to_end());
+                self.partitions[n - 1].init(buf);
+
+                Ok(())
+        }
 
 	fn read_quantization_indices(&mut self) {
 		let yac_abs    = self.b.read_literal(7);
@@ -1007,14 +1030,8 @@ impl<R: Reader> VP8<R> {
 			self.read_loop_filter_adjustments();
 		}
 
-		let num_partitions = 1 << self.b.read_literal(2);
-		if num_partitions > 1 {
-			fail!("multiple partitions unimplemented");
-
-                }
-
-                let buf = try!(self.r.read_to_end());
-                self.p.init(buf);
+		self.num_partitions = 1 << self.b.read_literal(2) as u8;
+		let _ = try!(self.init_partitions(self.num_partitions as uint));
 
 		self.read_quantization_indices();
 
@@ -1149,7 +1166,7 @@ impl<R: Reader> VP8<R> {
                 }
         }
 
-        fn read_coefficients(&mut self, block: &mut [i32], plane: uint, complexity: uint, dcq: i16, acq: i16) -> bool {
+        fn read_coefficients(&mut self, block: &mut [i32], p: uint, plane: uint, complexity: uint, dcq: i16, acq: i16) -> bool {
                 let first = if plane == 0 { 1 } else { 0 };
                 let probs = &self.token_probs[plane];
                 let tree  = DCT_TOKEN_TREE.as_slice();
@@ -1162,9 +1179,9 @@ impl<R: Reader> VP8<R> {
                         let table = probs[COEFF_BANDS[i]][complexity].as_slice();
 
                         let token = if !skip {
-                                self.p.read_with_tree(tree, table, 0)
+                                self.partitions[p].read_with_tree(tree, table, 0)
                         } else {
-                                self.p.read_with_tree(tree, table, 2)
+                                self.partitions[p].read_with_tree(tree, table, 2)
                         };
 
                         let mut abs_value = match token {
@@ -1186,7 +1203,7 @@ impl<R: Reader> VP8<R> {
                                         let mut j = 0;
 
                                         while t[j] > 0 {
-                                                extra += extra + self.p.read_bool(t[j]) as i16;
+                                                extra += extra + self.partitions[p].read_bool(t[j]) as i16;
                                                 j += 1;
                                         }
 
@@ -1202,7 +1219,7 @@ impl<R: Reader> VP8<R> {
                                      else if abs_value == 1 { 1 }
                                      else { 2 };
 
-                        if self.p.read_bool(128) == 1 {
+                        if self.partitions[p].read_bool(128) == 1 {
                                 abs_value = -abs_value;
                         }
 
@@ -1215,7 +1232,7 @@ impl<R: Reader> VP8<R> {
                 has_coefficients
         }
 
-        fn read_residual_data(&mut self, mb: &MacroBlock, mbx: uint) -> [i32, ..384] {
+        fn read_residual_data(&mut self, mb: &MacroBlock, mbx: uint, p: uint) -> [i32, ..384] {
                 let sindex     = mb.segmentid as uint;
                 let mut blocks = [0i32, ..384];
                 let mut plane  = if mb.luma_mode == B_PRED { 3 }
@@ -1227,7 +1244,7 @@ impl<R: Reader> VP8<R> {
                         let mut block = [0i32, ..16];
                         let dcq   = self.segment[sindex].y2dc;
                         let acq   = self.segment[sindex].y2ac;
-                        let n = self.read_coefficients(block, plane, complexity as uint, dcq, acq);
+                        let n = self.read_coefficients(block, p, plane, complexity as uint, dcq, acq);
 
                         self.left.complexity[0] = if n { 1 } else { 0 };
                         self.top[mbx].complexity[0] = if n { 1 } else { 0 };
@@ -1251,7 +1268,7 @@ impl<R: Reader> VP8<R> {
                                 let dcq   = self.segment[sindex].ydc;
                                 let acq   = self.segment[sindex].yac;
 
-                                let n = self.read_coefficients(block, plane, complexity as uint, dcq, acq);
+                                let n = self.read_coefficients(block, p, plane, complexity as uint, dcq, acq);
 
                                 if block[0] != 0 || n {
                                         idct4x4(block);
@@ -1277,7 +1294,7 @@ impl<R: Reader> VP8<R> {
                                         let dcq   = self.segment[sindex].uvdc;
                                         let acq   = self.segment[sindex].uvac;
 
-                                        let n = self.read_coefficients(tmp, plane, complexity as uint, dcq, acq);
+                                        let n = self.read_coefficients(tmp, p, plane, complexity as uint, dcq, acq);
 
                                         left = if n { 1 } else { 0 };
                                         self.top[mbx].complexity[x + j] = if n { 1 } else { 0 };
@@ -1294,6 +1311,7 @@ impl<R: Reader> VP8<R> {
 		let _ = try!(self.read_frame_header());
 
 		for mby in range(0, self.mbheight as uint) {
+                        let p = mby % (self.num_partitions as uint);
                         self.left = MacroBlock::new();
 
                         for mbx in range(0, self.mbwidth as uint) {
@@ -1301,7 +1319,7 @@ impl<R: Reader> VP8<R> {
                                 let mut blocks = [0i32, ..384];
 
                                 if !skip {
-                                        blocks = self.read_residual_data(&mb, mbx);
+                                        blocks = self.read_residual_data(&mb, mbx, p);
                                 } else {
                                         if mb.luma_mode != B_PRED {
                                                 self.left.complexity[0] = 0;
