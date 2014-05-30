@@ -1332,7 +1332,7 @@ impl<R: Reader> VP8Decoder<R> {
                 blocks
         }
 
-	pub fn decode_frame(&mut self) -> IoResult<Frame> {
+	pub fn decode_frame<'a>(&'a mut self) -> IoResult<&'a Frame> {
 		let _ = try!(self.read_frame_header());
 
 		for mby in range(0, self.mbheight as uint) {
@@ -1363,7 +1363,7 @@ impl<R: Reader> VP8Decoder<R> {
                         self.left_border = slice::from_elem(1 + 16, 129u8);
                 }
 
-                Ok(self.frame.clone())
+                Ok(&self.frame)
 	}
 }
 
