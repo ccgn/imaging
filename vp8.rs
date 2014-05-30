@@ -1177,8 +1177,13 @@ impl<R: Reader> VP8Decoder<R> {
                         self.left_border[i + 1] = ws[(i + 1) * stride + 16];
                 }
 
-                let ylength = if mby < self.mbheight as uint - 1 { 16u } else { (16 - (self.frame.height as uint & 15)) % 16 };
-                let xlength = if mbx < self.mbwidth as uint - 1 { 16u } else {  (16 - (self.frame.width as uint & 15)) % 16 };
+                let ylength = if mby < self.mbheight as uint - 1 { 16u }
+                              else if self.frame.height % 16 == 0 { 16u }
+                              else { (16 - (self.frame.height as uint & 15)) % 16 };
+
+                let xlength = if mbx < self.mbwidth as uint - 1 { 16u }
+                              else if self.frame.width % 16 == 0 { 16u }
+                              else { (16 - (self.frame.width as uint & 15)) % 16 };
 
                 for y in range(0u, ylength) {
                         for x in range(0u, xlength) {
@@ -1336,7 +1341,7 @@ impl<R: Reader> VP8Decoder<R> {
 		let _ = try!(self.read_frame_header());
 
 		for mby in range(0, self.mbheight as uint) {
-                        let p = mby % (self.num_partitions as uint);
+                        let p = mby % self.num_partitions as uint;
                         self.left = MacroBlock::new();
 
                         for mbx in range(0, self.mbwidth as uint) {
