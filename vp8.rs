@@ -791,7 +791,10 @@ struct VP8<R> {
 	top: ~[MacroBlock],
 	left: MacroBlock,
 
-        ybuf: ~[u8],
+        top_border: ~[u8],
+        left_border: ~[u8],
+
+        ybuf: ~[u8]
 }
 
 impl<R: Reader> VP8<R> {
@@ -827,7 +830,10 @@ impl<R: Reader> VP8<R> {
 			top: ~[],
 			left: m,
 
-                        ybuf: ~[],
+                        top_border: ~[],
+                        left_border: ~[],
+
+                        ybuf: ~[]
 		}
 	}
 
@@ -848,13 +854,15 @@ impl<R: Reader> VP8<R> {
 	}
 
         fn init_partitions(&mut self, n: uint) -> IoResult<()> {
-                let sizes = try!(self.r.read_exact(3 * n - 3));
+                if n > 1 {
+                        let sizes = try!(self.r.read_exact(3 * n - 3));
 
-                for (i, s) in sizes.chunks(3).enumerate() {
-                        let size = s[1] as u32 + (s[2] as u32 << 8) + (s[3] as u32 << 8);
-                        let buf  = try!(self.r.read_exact(size as uint));
+                        for (i, s) in sizes.chunks(3).enumerate() {
+                                let size = s[0] as u32 + (s[1] as u32 << 8) + (s[2] as u32 << 8);
+                                let buf  = try!(self.r.read_exact(size as uint));
 
-                        self.partitions[i].init(buf);
+                                self.partitions[i].init(buf);
+                        }
                 }
 
                 let buf = try!(self.r.read_to_end());
@@ -906,7 +914,7 @@ impl<R: Reader> VP8<R> {
 
 	fn read_loop_filter_adjustments(&mut self) {
 		if self.b.read_flag() {
-			for i in range(0, 4) {
+			for _i in range(0, 4) {
 				let ref_frame_delta_update_flag = self.b.read_flag();
 
 				let _delta = if ref_frame_delta_update_flag {
@@ -916,7 +924,7 @@ impl<R: Reader> VP8<R> {
 				};
 			}
 
-			for i in range(0, 4) {
+			for _i in range(0, 4) {
 				let mb_mode_delta_update_flag = self.b.read_flag();
 
 				let _delta = if mb_mode_delta_update_flag {
@@ -1000,10 +1008,10 @@ impl<R: Reader> VP8<R> {
                         self.mbwidth  = (self.width + 15) / 16;
                         self.mbheight = (self.height + 15) / 16;
 
-                        self.width += 16;
-                        self.height += 16;
-
                         self.ybuf = slice::from_elem(self.width as uint * self.height as uint, 0u8);
+
+                        self.top_border = slice::from_elem(self.width as uint + 4 + 16, 127u8);
+                        self.left_border = slice::from_elem(1 + 16, 129u8);
 		}
 
                 let buf = try!(self.r.read_exact(first_partition_size as uint));
@@ -1135,7 +1143,7 @@ impl<R: Reader> VP8<R> {
                 let stride = 1u + 16 + 4;
                 let w  = self.width as uint;
                 let mw = self.mbwidth as uint;
-                let mut ws = create_border(mbx, mby, mw, self.ybuf, w);
+                let mut ws = create_border(mbx, mby, mw, self.top_border, self.left_border);
 
                 match mb.luma_mode {
                         V_PRED  => predict_VPRED(ws, 16, 1, 1, stride),
@@ -1143,7 +1151,7 @@ impl<R: Reader> VP8<R> {
                         TM_PRED => predict_TMPRED(ws, 16, 1, 1, stride),
                         DC_PRED => predict_DCPRED(ws, 16, stride, mby != 0, mbx != 0),
                         B_PRED  => predict_4x4(ws, stride, mb.bpred, resdata),
-                        _       => fail!("unknown intra prediction mode")
+                        _       => fail!("unknown luma intra prediction mode")
                 }
 
                 if mb.luma_mode != B_PRED {
@@ -1159,8 +1167,18 @@ impl<R: Reader> VP8<R> {
                         }
                 }
 
-                for y in range(0u, 16) {
-                        for x in range(0u, 16) {
+                self.left_border[0] = ws[16];
+
+                for i in range(0u, 16) {
+                        self.top_border[mbx * 16 + i] = ws[16 * stride + 1 + i];
+                        self.left_border[i + 1] = ws[(i + 1) * stride + 16];
+                }
+
+                let ylength = if mby < self.mbheight as uint - 1 { 16u } else { (16 - (self.height as uint & 15)) % 16 };
+                let xlength = if mbx < self.mbwidth as uint - 1 { 16u } else {  (16 - (self.width as uint & 15)) % 16 };
+
+                for y in range(0u, ylength) {
+                        for x in range(0u, xlength) {
                                 self.ybuf[(mby * 16 + y) * w + mbx * 16 + x] = ws[(1 + y) * stride + 1 + x];
                         }
                 }
@@ -1288,13 +1306,17 @@ impl<R: Reader> VP8<R> {
                                 let mut left = self.left.complexity[y + j];
 
                                 for x in range(0u, 2) {
-                                        let complexity = self.top[mbx].complexity[x + j] + left;
+                                        let i = x + y * 2 + if j == 5 { 16 } else { 20 };
+                                        let block = blocks.mut_slice(i * 16, i * 16 + 16);
 
-                                        let mut tmp = [0i32, ..16];
+                                        let complexity = self.top[mbx].complexity[x + j] + left;
                                         let dcq   = self.segment[sindex].uvdc;
                                         let acq   = self.segment[sindex].uvac;
 
-                                        let n = self.read_coefficients(tmp, p, plane, complexity as uint, dcq, acq);
+                                        let n = self.read_coefficients(block, p, plane, complexity as uint, dcq, acq);
+                                        if block[0] != 0 || n {
+                                                idct4x4(block);
+                                        }
 
                                         left = if n { 1 } else { 0 };
                                         self.top[mbx].complexity[x + j] = if n { 1 } else { 0 };
@@ -1334,6 +1356,8 @@ impl<R: Reader> VP8<R> {
 
                                 self.intra_predict(mbx, mby, &mb, blocks);
                         }
+
+                        self.left_border = slice::from_elem(1 + 16, 129u8);
                 }
 
                 Ok(self.ybuf.clone())
@@ -1353,8 +1377,7 @@ fn init_top_macroblocks(width: uint) -> ~[MacroBlock] {
 	slice::from_fn(mb_width, |_| mb)
 }
 
-//12.3
-fn create_border(mbx: uint, mby: uint, mbwidth: uint, buf: &[u8], w: uint) -> [u8, ..357] {
+fn create_border(mbx: uint, mby: uint, mbw: uint, top: &[u8], left: &[u8]) -> [u8, ..357] {
         let stride = 1u + 16 + 4;
         let mut ws = [0u8, ..(1 + 16) * (1 + 16 + 4)];
 
@@ -1367,16 +1390,16 @@ fn create_border(mbx: uint, mby: uint, mbwidth: uint, buf: &[u8], w: uint) -> [u
                         }
                 } else  {
                         for i in range(0u, 16) {
-                                above[i] = buf[(mby * 16 - 1) * w + mbx * 16 + i];
+                                above[i] = top[mbx * 16 + i];
                         }
 
-                        if mbx == mbwidth - 1 {
+                        if mbx == mbw - 1 {
                                 for i in range(16u, above.len()) {
-                                        above[i] = buf[(mby * 16 - 1) * w + mbx * 16 + 15];
+                                        above[i] = top[mbx * 16 + 15];
                                 }
                         } else {
                                 for i in range(16u, above.len()) {
-                                        above[i] = buf[(mby * 16 - 1) * w + mbx * 16 + i];
+                                        above[i] = top[mbx * 16 + i];
                                 }
                         }
                 }
@@ -1395,7 +1418,7 @@ fn create_border(mbx: uint, mby: uint, mbwidth: uint, buf: &[u8], w: uint) -> [u
                 }
         } else {
                 for i in range(0u, 16) {
-                        ws[(i + 1) * stride] = buf[(mby * 16 + i) * w + mbx * 16 - 1];
+                        ws[(i + 1) * stride] = left[i + 1];
                 }
         }
 
@@ -1407,7 +1430,7 @@ fn create_border(mbx: uint, mby: uint, mbwidth: uint, buf: &[u8], w: uint) -> [u
         } else if mbx == 0 && mby != 0 {
                 129
         } else {
-                buf[(mby * 16 - 1) * w + mbx * 16 - 1]
+                left[0]
         };
 
         ws
