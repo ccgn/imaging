@@ -4,6 +4,9 @@
 *.ppm
 *.jpeg
 *.gif
+*.webp
+*.vp8
+*.ivf
 
 #Binary
 *.exe
