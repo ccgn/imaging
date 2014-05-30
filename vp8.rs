@@ -728,28 +728,27 @@ impl MacroBlock {
         }
 }
 
-#[deriving(Default, Show)]
-struct Frame {
-	keyframe: bool,
-	version: u8,
-	for_display: bool,
+#[deriving(Default, Show, Clone)]
+pub struct Frame {
+        pub width: u16,
+        pub height: u16,
+
+        pub ybuf: ~[u8],
+
+	pub keyframe: bool,
+	pub version: u8,
+	pub for_display: bool,
 
 	//Section 9.2
-	pixel_type: u8,
+	pub pixel_type: u8,
 
 	//Section 9.4 and 15
-	filter: u8,
-	filter_level: u8,
-	sharpness_level: u8,
-
-	//Section 9.10
-	prob_intra: Prob,
-
-	//Section 9.11
-	prob_skip_false: Option<Prob>
+	pub filter: u8,
+	pub filter_level: u8,
+	pub sharpness_level: u8,
 }
 
-#[deriving(Default, Show)]
+#[deriving(Default)]
 struct Segment {
         ydc: i16,
         yac: i16,
@@ -770,10 +769,7 @@ struct VP8<R> {
         r: R,
 	b: BoolReader,
 
-	pub width: u16,
-	pub height: u16,
-
-        mbwidth: u16,
+	mbwidth: u16,
         mbheight: u16,
 
 	frame: Frame,
@@ -788,13 +784,17 @@ struct VP8<R> {
         segment_tree_probs: [Prob, ..3],
         token_probs: ~TokenProbTables,
 
+        //Section 9.10
+        prob_intra: Prob,
+
+        //Section 9.11
+        prob_skip_false: Option<Prob>,
+
 	top: ~[MacroBlock],
 	left: MacroBlock,
 
         top_border: ~[u8],
         left_border: ~[u8],
-
-        ybuf: ~[u8]
 }
 
 impl<R: Reader> VP8<R> {
@@ -807,10 +807,7 @@ impl<R: Reader> VP8<R> {
                         r: r,
 			b: BoolReader::new(),
 
-			width: 0,
-			height: 0,
-
-                        mbwidth: 0,
+			mbwidth: 0,
                         mbheight: 0,
 
 			frame: f,
@@ -827,13 +824,17 @@ impl<R: Reader> VP8<R> {
 			segment_tree_probs: [255u8, ..3],
 			token_probs: ~COEFF_PROBS,
 
+                        //Section 9.10
+                        prob_intra: 0u8,
+
+                        //Section 9.11
+                        prob_skip_false: None,
+
 			top: ~[],
 			left: m,
 
                         top_border: ~[],
                         left_border: ~[],
-
-                        ybuf: ~[]
 		}
 	}
 
@@ -999,18 +1000,18 @@ impl<R: Reader> VP8<R> {
 			let w = try!(self.r.read_le_u16());
 			let h = try!(self.r.read_le_u16());
 
-			self.width = w & 0x3FFF;
-			self.height = h & 0x3FFF;
+			self.frame.width = w & 0x3FFF;
+			self.frame.height = h & 0x3FFF;
 
-			self.top = init_top_macroblocks(self.width as uint);
+			self.top = init_top_macroblocks(self.frame.width as uint);
 			self.left = MacroBlock{..self.top[0]};
 
-                        self.mbwidth  = (self.width + 15) / 16;
-                        self.mbheight = (self.height + 15) / 16;
+                        self.mbwidth  = (self.frame.width + 15) / 16;
+                        self.mbheight = (self.frame.height + 15) / 16;
 
-                        self.ybuf = slice::from_elem(self.width as uint * self.height as uint, 0u8);
+                        self.frame.ybuf = slice::from_elem(self.frame.width as uint * self.frame.height as uint, 0u8);
 
-                        self.top_border = slice::from_elem(self.width as uint + 4 + 16, 127u8);
+                        self.top_border = slice::from_elem(self.frame.width as uint + 4 + 16, 127u8);
                         self.left_border = slice::from_elem(1 + 16, 129u8);
 		}
 
@@ -1054,7 +1055,7 @@ impl<R: Reader> VP8<R> {
 		self.update_token_probabilities();
 
 		let mb_no_skip_coeff = self.b.read_literal(1);
-		self.frame.prob_skip_false = if mb_no_skip_coeff == 1 {
+		self.prob_skip_false = if mb_no_skip_coeff == 1 {
 			Some(self.b.read_literal(8))
 		} else {
 			None
@@ -1062,6 +1063,8 @@ impl<R: Reader> VP8<R> {
 
 		if !self.frame.keyframe {
 			//9.10 remaining frame data
+                        self.prob_intra = 0;
+
 			fail!("unimplemented")
 		} else {
 			//Reset motion vectors
@@ -1079,14 +1082,14 @@ impl<R: Reader> VP8<R> {
                         0
                 };
 
-		let skip_coeff = if self.frame.prob_skip_false.is_some() {
-			1 == self.b.read_bool(*self.frame.prob_skip_false.get_ref())
+		let skip_coeff = if self.prob_skip_false.is_some() {
+			1 == self.b.read_bool(*self.prob_skip_false.get_ref())
 		} else {
 			false
 		};
 
 		let inter_predicted = if !self.frame.keyframe {
-			1 == self.b.read_bool(self.frame.prob_intra)
+			1 == self.b.read_bool(self.prob_intra)
 		} else {
 			false
 		};
@@ -1141,7 +1144,7 @@ impl<R: Reader> VP8<R> {
 
         fn intra_predict(&mut self, mbx: uint, mby: uint, mb: &MacroBlock, resdata: &[i32]) {
                 let stride = 1u + 16 + 4;
-                let w  = self.width as uint;
+                let w  = self.frame.width as uint;
                 let mw = self.mbwidth as uint;
                 let mut ws = create_border(mbx, mby, mw, self.top_border, self.left_border);
 
@@ -1174,12 +1177,12 @@ impl<R: Reader> VP8<R> {
                         self.left_border[i + 1] = ws[(i + 1) * stride + 16];
                 }
 
-                let ylength = if mby < self.mbheight as uint - 1 { 16u } else { (16 - (self.height as uint & 15)) % 16 };
-                let xlength = if mbx < self.mbwidth as uint - 1 { 16u } else {  (16 - (self.width as uint & 15)) % 16 };
+                let ylength = if mby < self.mbheight as uint - 1 { 16u } else { (16 - (self.frame.height as uint & 15)) % 16 };
+                let xlength = if mbx < self.mbwidth as uint - 1 { 16u } else {  (16 - (self.frame.width as uint & 15)) % 16 };
 
                 for y in range(0u, ylength) {
                         for x in range(0u, xlength) {
-                                self.ybuf[(mby * 16 + y) * w + mbx * 16 + x] = ws[(1 + y) * stride + 1 + x];
+                                self.frame.ybuf[(mby * 16 + y) * w + mbx * 16 + x] = ws[(1 + y) * stride + 1 + x];
                         }
                 }
         }
@@ -1329,7 +1332,7 @@ impl<R: Reader> VP8<R> {
                 blocks
         }
 
-	pub fn decode(&mut self) -> IoResult<~[u8]> {
+	pub fn decode_frame(&mut self) -> IoResult<Frame> {
 		let _ = try!(self.read_frame_header());
 
 		for mby in range(0, self.mbheight as uint) {
@@ -1360,7 +1363,7 @@ impl<R: Reader> VP8<R> {
                         self.left_border = slice::from_elem(1 + 16, 129u8);
                 }
 
-                Ok(self.ybuf.clone())
+                Ok(self.frame.clone())
 	}
 }
 
