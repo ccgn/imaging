@@ -6,11 +6,17 @@
 *.gif
 *.webp
 *.vp8
+<<<<<<< HEAD
 *.ivf
+=======
+>>>>>>> origin/vp8
 
 #Binary
 *.exe
 *.o
+
+#Docs
+*.txt
 
 ## Windows detritus
 # Windows image file caches
