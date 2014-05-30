@@ -765,7 +765,7 @@ struct Segment {
 	loopfilter_level: i8,
 }
 
-struct VP8<R> {
+pub struct VP8Decoder<R> {
         r: R,
 	b: BoolReader,
 
@@ -797,13 +797,13 @@ struct VP8<R> {
         left_border: ~[u8],
 }
 
-impl<R: Reader> VP8<R> {
-	pub fn new(r: R) -> VP8<R> {
+impl<R: Reader> VP8Decoder<R> {
+	pub fn new(r: R) -> VP8Decoder<R> {
 		let f: Frame = Default::default();
 		let s: Segment = Default::default();
                 let m = MacroBlock::new();
 
-		VP8 {
+		VP8Decoder {
                         r: r,
 			b: BoolReader::new(),
 
