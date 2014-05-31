@@ -986,10 +986,10 @@ impl<W: Writer> JPEGEncoder<W> {
 	}
 
 	fn write_block(&mut self,
-				   block: &[i32],
-				   prevdc: i32,
-				   dctable: &[(u8, u16)],
-				   actable: &[(u8, u16)]) -> IoResult<i32> {
+		       block: &[i32],
+		       prevdc: i32,
+		       dctable: &[(u8, u16)],
+		       actable: &[(u8, u16)]) -> IoResult<i32> {
 
 		//Differential DC encoding
 		let dcval = block[0];
@@ -1112,10 +1112,10 @@ impl<W: Writer> JPEGEncoder<W> {
 	}
 
 	pub fn encode(&mut self,
-				  image: &[u8],
-				  width: u32,
-				  height: u32,
-				  c: colortype::ColorType) -> IoResult<()> {
+		      image: &[u8],
+		      width: u32,
+		      height: u32,
+		      c: colortype::ColorType) -> IoResult<()> {
 
 		let n = colortype::num_components(c);
 		let num_components = if n == 1 || n == 2 {1}
@@ -1131,7 +1131,7 @@ impl<W: Writer> JPEGEncoder<W> {
 
 		assert!(self.tables.len() / 64 == 2);
 		let numtables = if num_components == 1 {1}
-						else {2};
+				else {2};
 
 		let t = self.tables.clone();
 		for (i, table) in t.chunks(64).enumerate().take(numtables) {
@@ -1194,9 +1194,9 @@ fn build_jfif_header() -> ~[u8] {
 }
 
 fn build_frame_header(precision: u8,
-					  width: u16,
-					  height: u16,
-					  components: &[Component]) -> ~[u8] {
+		      width: u16,
+		      height: u16,
+		      components: &[Component]) -> ~[u8] {
 
 	let mut m = MemWriter::new();
 
@@ -1235,9 +1235,9 @@ fn build_scan_header(components: &[Component]) -> ~[u8] {
 }
 
 fn build_huffman_segment(class: u8,
-						 destination: u8,
-						 numcodes: &[u8],
-						 values: &[u8]) -> ~[u8] {
+			 destination: u8,
+			 numcodes: &[u8],
+			 values: &[u8]) -> ~[u8] {
 	let mut m = MemWriter::new();
 
 	let tcth = (class << 4) | destination;
@@ -1260,8 +1260,8 @@ fn build_huffman_segment(class: u8,
 }
 
 fn build_quantization_segment(precision: u8,
-							  identifier: u8,
-							  qtable: &[u8]) -> ~[u8] {
+			      identifier: u8,
+			      qtable: &[u8]) -> ~[u8] {
 
 	assert!(qtable.len() % 64 == 0);
 	let mut m = MemWriter::new();
@@ -1316,13 +1316,13 @@ fn value_at(s: &[u8], index: uint) -> u8 {
 }
 
 fn copy_blocks_YCbCr(source: &[u8],
-					 x0: uint,
-				     y0: uint,
-					 width: uint,
-					 bpp: uint,
-					 yb: &mut [u8, ..64],
-					 cbb: &mut [u8, ..64],
-					 crb: &mut [u8, ..64]) {
+		     x0: uint,
+		     y0: uint,
+		     width: uint,
+		     bpp: uint,
+		     yb: &mut [u8, ..64],
+		     cbb: &mut [u8, ..64],
+		     crb: &mut [u8, ..64]) {
 	for y in range(0u, 8) {
 		let ystride = (y0 + y) * bpp * width;
 		for x in range(0u, 8) {
@@ -1342,11 +1342,11 @@ fn copy_blocks_YCbCr(source: &[u8],
 }
 
 fn copy_blocks_Grey(source: &[u8],
-					x0: uint,
-					y0: uint,
-					width: uint,
-					bpp: uint,
-					gb: &mut [u8, ..64]) {
+		    x0: uint,
+		    y0: uint,
+		    width: uint,
+		    bpp: uint,
+		    gb: &mut [u8, ..64]) {
 	for y in range(0u, 8) {
 		let ystride = (y0 + y) * bpp * width;
 		for x in range(0u, 8) {
