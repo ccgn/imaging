@@ -231,18 +231,20 @@ impl<R: Reader>JPEGDecoder<R> {
 
 		let dctable = &self.dctables[dc];
 		let actable = &self.actables[ac];
-		let qtable  = self.qtables.slice(64 * q as uint,
-									 	 64 * q as uint + 64);
+		let qtable  = self.qtables.slice(64 * q as uint, 64 * q as uint + 64);
 
 		let t     = try!(self.h.decode_symbol(&mut self.r, dctable));
-		let diff  = if t > 0 {try!(self.h.receive(&mut self.r, t))}
-					else {0};
+		let diff  = if t > 0 {
+			try!(self.h.receive(&mut self.r, t))
+		} else {
+			0
+		};
 
 		//Section F.2.1.3.1
 		let diff = extend(diff, t);
-		let dc_coeff = diff + pred;
+		let dc = diff + pred;
 
-		tmp[0] = dc_coeff * qtable[0] as i32;
+		tmp[0] = dc * qtable[0] as i32;
 
 		let mut k = 0;
 
@@ -270,7 +272,7 @@ impl<R: Reader>JPEGDecoder<R> {
 
 		fast::idct(tmp, zz);
 
-		Ok(dc_coeff)
+		Ok(dc)
 	}
 
 	fn read_metadata(&mut self) -> IoResult<()> {
@@ -431,8 +433,7 @@ impl<R: Reader>JPEGDecoder<R> {
 			assert!(pq == 0);
 			assert!(tq <= 3);
 
-			let slice = self.qtables.mut_slice(64 * tq as uint,
-											   64 * tq as uint + 64);
+			let slice = self.qtables.mut_slice(64 * tq as uint, 64 * tq as uint + 64);
 			let _ = try!(self.r.fill(slice));
 
 			table_length -= 1 + 64;
