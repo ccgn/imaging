@@ -811,7 +811,7 @@ fn derive_tables(bits: Vec<u8>, huffval: Vec<u8>) -> HuffTable {
 		valptr: valptr
 	}
 }
-/*
+
 //section K.1
 //table K.1
 static STD_LUMA_QTABLE: [u8, ..64] = [
@@ -912,16 +912,16 @@ static CHROMAREDID: u8 = 3;
 pub struct JPEGEncoder<W> {
 	w: W,
 
-	components: ~[Component],
+	components: Vec<Component>,
 	tables: Vec<u8>,
 
 	accumulator: u32,
 	nbits: u8,
 
-	luma_dctable: ~[(u8, u16)],
-	luma_actable: ~[(u8, u16)],
-	chroma_dctable: ~[(u8, u16)],
-	chroma_actable: ~[(u8, u16)],
+	luma_dctable: Vec<(u8, u16)>,
+	luma_actable: Vec<(u8, u16)>,
+	chroma_dctable: Vec<(u8, u16)>,
+	chroma_actable: Vec<(u8, u16)>,
 }
 
 impl<W: Writer> JPEGEncoder<W> {
@@ -932,14 +932,14 @@ impl<W: Writer> JPEGEncoder<W> {
 		let cd = build_huff_lut(STD_CHROMA_DC_CODE_LENGTHS, STD_CHROMA_DC_VALUES);
 		let ca = build_huff_lut(STD_CHROMA_AC_CODE_LENGTHS, STD_CHROMA_AC_VALUES);
 
-		let components = [
+		let components = vec![
 			Component {id: LUMAID, h: 1, v: 1, tq: LUMADESTINATION, dc_table: LUMADESTINATION, ac_table: LUMADESTINATION, dc_pred: 0},
 			Component {id: CHROMABLUEID, h: 1, v: 1, tq: CHROMADESTINATION, dc_table: CHROMADESTINATION, ac_table: CHROMADESTINATION, dc_pred: 0},
 			Component {id: CHROMAREDID, h: 1, v: 1, tq: CHROMADESTINATION, dc_table: CHROMADESTINATION, ac_table: CHROMADESTINATION, dc_pred: 0}
-		].clone().to_owned();
+		];
 
-		let tables = slice::append(Vec::new(), STD_LUMA_QTABLE);
-		let tables = slice::append(tables, STD_CHROMA_QTABLE);
+		let tables = Vec::new().append(STD_LUMA_QTABLE);
+		let tables = tables.append(STD_CHROMA_QTABLE);
 
 		JPEGEncoder {
 			w: w,
@@ -964,7 +964,7 @@ impl<W: Writer> JPEGEncoder<W> {
 		if data.is_some() {
 			let b = data.unwrap();
 			let _ = try!(self.w.write_be_u16(b.len() as u16 + 2));
-			let _ = try!(self.w.write(b));
+			let _ = try!(self.w.write(b.as_slice()));
 		}
 
 		Ok(())
@@ -1019,12 +1019,12 @@ impl<W: Writer> JPEGEncoder<W> {
 
 		//Figure F.2
 		let mut zero_run = 0;
-		let mut k = 0;
+		let mut k = 0u;
 
 		loop {
 			k += 1;
 
-			if block[UNZIGZAG[k]] == 0 {
+			if block[UNZIGZAG[k] as uint] == 0 {
 				if k == 63 {
 					let _ = try!(self.huffman_encode(0x00, actable));
 					break
@@ -1038,7 +1038,7 @@ impl<W: Writer> JPEGEncoder<W> {
 					zero_run -= 16;
 				}
 
-				let (size, value) = encode_coefficient(block[UNZIGZAG[k]]);
+				let (size, value) = encode_coefficient(block[UNZIGZAG[k] as uint]);
 				let symbol = (zero_run << 4) | size;
 
 				let _ = try!(self.huffman_encode(symbol, actable));
@@ -1070,14 +1070,14 @@ impl<W: Writer> JPEGEncoder<W> {
 				fast::fdct(yblock.as_slice(), dct_yblock);
 
 				//Quantization
-				for i in range(0, 64) {
-					dct_yblock[i]   = f32::round((dct_yblock[i] / 8)   as f32 / self.tables.slice_to(64)[i] as f32) as i32;
+				for i in range(0u, 64) {
+					dct_yblock[i]   = ((dct_yblock[i] / 8)   as f32 / self.tables.slice_to(64)[i] as f32).round() as i32;
 				}
 
-				let la = self.luma_actable.to_owned();
-				let ld = self.luma_dctable.to_owned();
+				let la = self.luma_actable.clone();
+				let ld = self.luma_dctable.clone();
 
-				y_dcprev  = try!(self.write_block(dct_yblock, y_dcprev, ld, la));
+				y_dcprev  = try!(self.write_block(dct_yblock, y_dcprev, ld.as_slice(), la.as_slice()));
 			}
 		}
 
@@ -1109,20 +1109,20 @@ impl<W: Writer> JPEGEncoder<W> {
 				fast::fdct(cr_block.as_slice(), dct_cr_block);
 
 				//Quantization
-				for i in range(0, 64) {
-					dct_yblock[i]   = f32::round((dct_yblock[i] / 8)   as f32 / self.tables.slice_to(64)[i] as f32) as i32;
-					dct_cb_block[i] = f32::round((dct_cb_block[i] / 8) as f32 / self.tables.slice_from(64)[i] as f32) as i32;
-					dct_cr_block[i] = f32::round((dct_cr_block[i] / 8) as f32 / self.tables.slice_from(64)[i] as f32) as i32;
+				for i in range(0u, 64) {
+					dct_yblock[i]   = ((dct_yblock[i] / 8)   as f32 / self.tables.slice_to(64)[i] as f32).round() as i32;
+					dct_cb_block[i] = ((dct_cb_block[i] / 8) as f32 / self.tables.slice_from(64)[i] as f32).round() as i32;
+					dct_cr_block[i] = ((dct_cr_block[i] / 8) as f32 / self.tables.slice_from(64)[i] as f32).round() as i32;
 				}
 
-				let la = self.luma_actable.to_owned();
-				let ld = self.luma_dctable.to_owned();
-				let cd = self.chroma_dctable.to_owned();
-				let ca = self.chroma_actable.to_owned();
+				let la = self.luma_actable.clone();
+				let ld = self.luma_dctable.clone();
+				let cd = self.chroma_dctable.clone();
+				let ca = self.chroma_actable.clone();
 
-				y_dcprev  = try!(self.write_block(dct_yblock, y_dcprev, ld, la));
-				cb_dcprev = try!(self.write_block(dct_cb_block, cb_dcprev, cd, ca));
-				cr_dcprev = try!(self.write_block(dct_cr_block, cr_dcprev, cd, ca));
+				y_dcprev  = try!(self.write_block(dct_yblock, y_dcprev, ld.as_slice(), la.as_slice()));
+				cb_dcprev = try!(self.write_block(dct_cb_block, cb_dcprev, cd.as_slice(), ca.as_slice()));
+				cr_dcprev = try!(self.write_block(dct_cr_block, cr_dcprev, cd.as_slice(), ca.as_slice()));
 			}
 		}
 
@@ -1152,7 +1152,7 @@ impl<W: Writer> JPEGEncoder<W> {
 				else {2};
 
 		let t = self.tables.clone();
-		for (i, table) in t.chunks(64).enumerate().take(numtables) {
+		for (i, table) in t.as_slice().chunks(64).enumerate().take(numtables) {
 			let buf = build_quantization_segment(8, i as u8, table);
 			let _   = try!(self.write_segment(DQT, Some(buf)));
 		}
@@ -1290,8 +1290,8 @@ fn build_quantization_segment(precision: u8,
 	let pqtq = (p << 4) | identifier as u8;
 	let _    = m.write_u8(pqtq);
 
-	for i in range(0, 64) {
-		let _ = m.write_u8(qtable[UNZIGZAG[i]]);
+	for i in range(0u, 64) {
+		let _ = m.write_u8(qtable[UNZIGZAG[i] as uint]);
 	}
 
 	m.unwrap()
@@ -1328,7 +1328,7 @@ fn rgb_to_ycbcr(r: u8, g: u8, b: u8) -> (u8, u8, u8) {
 fn value_at(s: &[u8], index: uint) -> u8 {
 	if index < s.len() {
 		s[index]
-	}else {
+	} else {
 		s[s.len() - 1]
 	}
 }
@@ -1374,13 +1374,13 @@ fn copy_blocks_Grey(source: &[u8],
 	}
 }
 
-fn build_huff_lut(bits: &[u8], huffval: &[u8]) -> ~[(u8, u16)] {
+fn build_huff_lut(bits: &[u8], huffval: &[u8]) -> Vec<(u8, u16)> {
 	let mut lut = Vec::from_elem(256, (17u8, 0u16));
 	let (huffsize, huffcode) = derive_codes_and_sizes(bits);
 
 	for (i, &v) in huffval.iter().enumerate() {
-		lut[v as uint] = (huffsize[i as uint], huffcode[i as uint]);
+		lut.as_mut_slice()[v as uint] = (huffsize.as_slice()[i as uint], huffcode.as_slice()[i as uint]);
 	}
 
 	lut
-}*/
+}

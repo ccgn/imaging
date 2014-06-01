@@ -7,7 +7,7 @@ use std::io::File;
 use std::io::MemReader;
 
 use jpeg::JPEGDecoder;
-//use jpeg::JPEGEncoder;
+use jpeg::JPEGEncoder;
 //use png::PNGDecoder;
 //use png::PNGEncoder;
 //use gif::GIFDecoder;
@@ -91,9 +91,9 @@ fn main() {
 	println!("{} bytes", out.len());
 	println!("decoded in {} ms", (after - now) / (1000 * 1000));
 
-	//let t = out.clone();
-	/*spawn(proc() {
-		let fout = File::create(&Path::new(os::args()[1] + ".jpg")).unwrap();
+	let t = out.clone();
+	spawn(proc() {
+		let fout = File::create(&Path::new(format!("{}.jpg", os::args().as_slice()[1]))).unwrap();
 
 		let now = time::precise_time_ns();
 		let _ = JPEGEncoder::new(fout).encode(t.as_slice(), w, h, c);
@@ -101,7 +101,7 @@ fn main() {
 
 		println!("encoded jpeg in {} ms", (after - now) / (1000 * 1000));
 	});
-
+/*
 	let t = out.clone();
 	spawn(proc() {
 		let fout = File::create(&Path::new(os::args()[1] + ".ppm")).unwrap();
