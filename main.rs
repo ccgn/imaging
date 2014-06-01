@@ -1,6 +1,6 @@
 extern crate collections;
 extern crate time;
-//extern crate flate;
+extern crate flate;
 
 use std::os;
 use std::io::File;
@@ -9,7 +9,7 @@ use std::io::MemReader;
 use jpeg::JPEGDecoder;
 use jpeg::JPEGEncoder;
 use png::PNGDecoder;
-//use png::PNGEncoder;
+use png::PNGEncoder;
 //use gif::GIFDecoder;
 use ppm::PPMEncoder;
 //use webp::WebpDecoder;
@@ -112,7 +112,7 @@ fn main() {
 
 		println!("encoded ppm in {} ms", (after - now) / (1000 * 1000));
 	});
-/*
+
 	let t = out.clone();
 	spawn(proc() {
 		let fout = File::create(&Path::new(format!("{}.png", os::args().as_slice()[1]))).unwrap();
@@ -122,5 +122,5 @@ fn main() {
 		let after = time::precise_time_ns();
 
 		println!("encoded png in {} ms", (after - now) / (1000 * 1000));
-	});*/
+	});
 }

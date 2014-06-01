@@ -460,7 +460,7 @@ impl<R: Reader> Reader for IDATReader<R> {
 		Ok(start)
 	}
 }
-/*
+
 pub struct PNGEncoder<W> {
 	w: W,
 	crc: Crc32
@@ -475,19 +475,19 @@ impl<W: Writer> PNGEncoder<W> {
 	}
 
 	pub fn encode(&mut self,
-				  image: &[u8],
-				  width: u32,
-				  height: u32,
-				  c: colortype::ColorType) -> IoResult<()> {
+		      image: &[u8],
+		      width: u32,
+		      height: u32,
+		      c: colortype::ColorType) -> IoResult<()> {
 
 		let _ = try!(self.write_signature());
 
 		let (bytes, bpp) = build_IHDR(width, height, c);
-		let _ = try!(self.write_chunk("IHDR", bytes));
+		let _ = try!(self.write_chunk("IHDR", bytes.as_slice()));
 
 		let compressed_bytes = build_IDAT(image, bpp, width, height);
 
-		for chunk in compressed_bytes.chunks(1024 * 256) {
+		for chunk in compressed_bytes.as_slice().chunks(1024 * 256) {
 			let _ = try!(self.write_chunk("IDAT", chunk));
 		}
 
@@ -570,29 +570,29 @@ fn filter(method: u8, bpp: uint, previous: &[u8], current: &mut [u8]) {
 		NOFILTER => (),
 		SUB      => {
 			for i in range(bpp, len) {
-				current[i] = orig[i] - orig[i - bpp];
+				current[i] = orig.as_slice()[i] - orig.as_slice()[i - bpp];
 			}
 		}
 		UP       => {
 			for i in range(0, len) {
-				current[i] = orig[i] - previous[i];
+				current[i] = orig.as_slice()[i] - previous[i];
 			}
 		}
 		AVERAGE  => {
 			for i in range(0, bpp) {
-				current[i] = orig[i] - previous[i] / 2;
+				current[i] = orig.as_slice()[i] - previous[i] / 2;
 			}
 
 			for i in range(bpp, len) {
-				current[i] = orig[i] - ((orig[i - bpp] as i16 + previous[i] as i16) / 2) as u8;
+				current[i] = orig.as_slice()[i] - ((orig.as_slice()[i - bpp] as i16 + previous[i] as i16) / 2) as u8;
 			}
 		}
 		PAETH    => {
 			for i in range(0, bpp) {
-				current[i] = orig[i] - filter_paeth(0, previous[i], 0);
+				current[i] = orig.as_slice()[i] - filter_paeth(0, previous[i], 0);
 			}
 			for i in range(bpp, len) {
-				current[i] = orig[i] - filter_paeth(orig[i - bpp], previous[i], previous[i - bpp]);
+				current[i] = orig.as_slice()[i] - filter_paeth(orig.as_slice()[i - bpp], previous[i], previous[i - bpp]);
 			}
 		}
 
@@ -630,12 +630,12 @@ fn build_IDAT(image: &[u8], bpp: uint, width: u32, height: u32) -> Vec<u8> {
 	let mut c = Vec::from_elem(4 * rowlen, 0u8);
 	let mut b = Vec::from_elem(height as uint + rowlen * height as uint, 0u8);
 
-	for (row, outrow) in image.chunks(rowlen).zip(b.mut_chunks(1 + rowlen)) {
-		for s in c.mut_chunks(rowlen) {
+	for (row, outrow) in image.as_slice().chunks(rowlen).zip(b.as_mut_slice().mut_chunks(1 + rowlen)) {
+		for s in c.as_mut_slice().mut_chunks(rowlen) {
 			slice::bytes::copy_memory(s, row);
 		}
 
-		let filter = select_filter(rowlen, bpp, p, c);
+		let filter = select_filter(rowlen, bpp, p.as_slice(), c.as_mut_slice());
 
 		outrow[0]  = filter;
 		let out    = outrow.mut_slice_from(1);
@@ -643,11 +643,11 @@ fn build_IDAT(image: &[u8], bpp: uint, width: u32, height: u32) -> Vec<u8> {
 
 		match filter {
 			NOFILTER => slice::bytes::copy_memory(out, row),
-			_ 	 	 => slice::bytes::copy_memory(out, c.slice(stride, stride + rowlen)),
+			_ 	 => slice::bytes::copy_memory(out, c.slice(stride, stride + rowlen)),
 		}
 
-		slice::bytes::copy_memory(p, row);
+		slice::bytes::copy_memory(p.as_mut_slice(), row);
 	}
 
-	deflate_bytes_zlib(b).as_slice().to_owned()
-}*/
+	Vec::from_slice(deflate_bytes_zlib(b.as_slice()).unwrap().as_slice())
+}
