@@ -8,20 +8,20 @@ use std::io::MemReader;
 
 use jpeg::JPEGDecoder;
 use jpeg::JPEGEncoder;
-//use png::PNGDecoder;
+use png::PNGDecoder;
 //use png::PNGEncoder;
 //use gif::GIFDecoder;
 use ppm::PPMEncoder;
 //use webp::WebpDecoder;
 
 mod colortype;
-//mod hash;
-//mod deflate;
-//mod zlib;
+mod hash;
+mod deflate;
+mod zlib;
 //mod lzw;
 mod dct;
 mod jpeg;
-//mod png;
+mod png;
 //mod gif;
 mod ppm;
 //mod vp8;
@@ -49,7 +49,7 @@ fn main() {
 			let d = j.color_type();
 
 			(a, b, c, d)
-		}/*
+		}
 		Some("png") => {
 			let mut p = PNGDecoder::new(m);
 
@@ -59,7 +59,7 @@ fn main() {
 			let _ = p.palette();
 
 			(a, b, c, d)
-		}
+		}/*
 		Some("gif") => {
 			let mut g = GIFDecoder::new(m);
 
@@ -101,10 +101,10 @@ fn main() {
 
 		println!("encoded jpeg in {} ms", (after - now) / (1000 * 1000));
 	});
-/*
+
 	let t = out.clone();
 	spawn(proc() {
-		let fout = File::create(&Path::new(os::args()[1] + ".ppm")).unwrap();
+		let fout = File::create(&Path::new(format!("{}.ppm", os::args().as_slice()[1]))).unwrap();
 
 		let now = time::precise_time_ns();
 		let _ = PPMEncoder::new(fout).encode(t.as_slice(), w, h, c);
@@ -112,10 +112,10 @@ fn main() {
 
 		println!("encoded ppm in {} ms", (after - now) / (1000 * 1000));
 	});
-
+/*
 	let t = out.clone();
 	spawn(proc() {
-		let fout = File::create(&Path::new(os::args()[1] + ".png")).unwrap();
+		let fout = File::create(&Path::new(format!("{}.png", os::args().as_slice()[1]))).unwrap();
 
 		let now = time::precise_time_ns();
 		let _ = PNGEncoder::new(fout).encode(t.as_slice(), w, h, c);

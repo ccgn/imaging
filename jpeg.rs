@@ -1,4 +1,3 @@
-use std::f32;
 use std::slice;
 use std::io::MemWriter;
 use std::io::IoResult;

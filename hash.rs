@@ -43,17 +43,17 @@ impl Crc32 {
 
 		for n in range(0u32, 256) {
 			let mut c = n;
-			
+
 			for _ in range(0, 8) {
 				c = if c & 1 == 1 {
 					IEEE_POLYNOMIAL ^ (c >> 1)
 				}
 				else {
-					c >> 1	
+					c >> 1
 				};
 			}
 
-			t[n] = c;
+			t[n as uint] = c;
 		}
 
 		Crc32 {table: t, crc: 0xFFFFFFFF}
@@ -64,7 +64,7 @@ impl Crc32 {
 			let a = (self.crc ^ byte as u32) & 0xFF;
 			let b = self.crc >> 8;
 
-			self.crc = self.table[a] as u32 ^ b;
+			self.crc = self.table[a as uint] as u32 ^ b;
 		}
 	}
 

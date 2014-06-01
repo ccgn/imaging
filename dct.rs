@@ -1,10 +1,6 @@
 //The forward dct's output coefficients are scaled by 8
 //The inverse dct's output samples are clamped to the range [0, 255]
 
-fn level_shift_down(a: u8) -> i32 {
-	a as i32 - 128
-}
-
 fn level_shift_up(a: i32) -> u8 {
 	if a < -128 {0u8}
 	else if a > 127 {255u8}

@@ -10,9 +10,9 @@ use colortype;
 use hash::Crc32;
 use zlib::ZlibDecoder;
 
-static PNGSIGNATURE: &'static [u8] = &[137, 80, 78, 71, 13, 10, 26, 10];
+static PNGSIGNATURE: [u8, ..8] = [137, 80, 78, 71, 13, 10, 26, 10];
 
-#[deriving(Eq)]
+#[deriving(PartialEq)]
 enum PNGState {
 	Start,
 	HaveSignature,
@@ -40,7 +40,7 @@ static PAETH: u8 = 4;
 pub struct PNGDecoder<R> {
 	z: ZlibDecoder<IDATReader<R>>,
 	crc: Crc32,
-	previous: ~[u8],
+	previous: Vec<u8>,
 	state: PNGState,
 
 	width: u32,
@@ -48,12 +48,12 @@ pub struct PNGDecoder<R> {
 	bit_depth: u8,
 	colour_type: u8,
 	pixel_type: colortype::ColorType,
-	palette: Option<~[(u8, u8, u8)]>,
+	palette: Option<Vec<(u8, u8, u8)>>,
 
 	interlace_method: u8,
 
 	chunk_length: u32,
-	chunk_type: ~[u8],
+	chunk_type: Vec<u8>,
 	bpp: uint,
 	rlength: uint
 }
@@ -65,7 +65,7 @@ impl<R: Reader> PNGDecoder<R> {
 			pixel_type: colortype::Grey(1),
 			palette: None,
 
-			previous: ~[],
+			previous: Vec::new(),
 			state: Start,
 			z: ZlibDecoder::new(idat_reader),
 			crc: Crc32::new(),
@@ -77,7 +77,7 @@ impl<R: Reader> PNGDecoder<R> {
 			interlace_method: 0,
 
 			chunk_length: 0,
-			chunk_type: ~[],
+			chunk_type: Vec::new(),
 			bpp: 0,
 			rlength: 0,
 		}
@@ -104,10 +104,15 @@ impl<R: Reader> PNGDecoder<R> {
 		}
 
 		let filter  = try!(self.z.read_byte());
-		let _ = try!(self.z.fill(buf.mut_slice_to(self.rlength)));
 
-		unfilter(filter, self.bpp, self.previous, buf.mut_slice_to(self.rlength));
-		slice::bytes::copy_memory(self.previous, buf.slice_to(self.rlength));
+		let mut read = 0;
+		while read < self.rlength {
+			let r = try!(self.z.read(buf.mut_slice_from(read)));
+			read += r;
+		}
+
+		unfilter(filter, self.bpp, self.previous.as_slice(), buf.mut_slice_to(self.rlength));
+		slice::bytes::copy_memory(self.previous.as_mut_slice(), buf.slice_to(self.rlength));
 
 		if self.palette.is_some() {
 			let s = (*self.palette.get_ref()).as_slice();
@@ -117,15 +122,15 @@ impl<R: Reader> PNGDecoder<R> {
 		Ok(buf.len())
 	}
 
-	pub fn decode_image(&mut self) -> IoResult<~[u8]> {
+	pub fn decode_image(&mut self) -> IoResult<Vec<u8>> {
 		if self.state == Start {
 			let _ = try!(self.read_metadata());
 		}
 
 		let row = self.rowlen();
-		let mut buf = slice::from_elem(row * self.height as uint, 0u8);
+		let mut buf = Vec::from_elem(row * self.height as uint, 0u8);
 
-		for chunk in buf.mut_chunks(row) {
+		for chunk in buf.as_mut_slice().mut_chunks(row) {
 			let _len = try!(self.read_scanline(chunk));
 		}
 
@@ -145,16 +150,12 @@ impl<R: Reader> PNGDecoder<R> {
 		Ok(png.as_slice() == PNGSIGNATURE)
 	}
 
-	fn parse_IHDR(&mut self, buf: ~[u8]) -> Result<(), PNGError> {
+	fn parse_IHDR(&mut self, buf: Vec<u8>) -> Result<(), PNGError> {
 		self.crc.update(buf.as_slice());
 		let mut m = MemReader::new(buf);
 
 		self.width = m.read_be_u32().unwrap();
 		self.height = m.read_be_u32().unwrap();
-
-		if self.width < 0 || self.height < 0 {
-			return Err(InvalidDimensions)
-		}
 
 		self.bit_depth = m.read_byte().unwrap();
 		self.colour_type = m.read_byte().unwrap();
@@ -206,12 +207,12 @@ impl<R: Reader> PNGDecoder<R> {
 
 		self.rlength = (bits_per_pixel * self.width as uint + 7) / 8;
 		self.bpp = (bits_per_pixel + 7) / 8;
-		self.previous = slice::from_elem(self.rlength as uint, 0u8);
+		self.previous = Vec::from_elem(self.rlength as uint, 0u8);
 
 		Ok(())
 	}
 
-	fn parse_PLTE(&mut self, buf: ~[u8]) -> Result<(), PNGError> {
+	fn parse_PLTE(&mut self, buf: Vec<u8>) -> Result<(), PNGError> {
 		self.crc.update(buf.as_slice());
 
 		let len = buf.len() / 3;
@@ -220,11 +221,11 @@ impl<R: Reader> PNGDecoder<R> {
 			return Err(InvalidPLTE)
 		}
 
-		let p = slice::from_fn(256, |i| {
+		let p = Vec::from_fn(256, |i| {
 			if i < len {
-				let r = buf[3 * i];
-				let g = buf[3 * i + 1];
-				let b = buf[3 * i + 2];
+				let r = buf.as_slice()[3 * i];
+				let g = buf.as_slice()[3 * i + 1];
+				let b = buf.as_slice()[3 * i + 2];
 
 				(r, g, b)
 			}
@@ -258,7 +259,7 @@ impl<R: Reader> PNGDecoder<R> {
 
 			let s = {
 				let a = str::from_utf8_owned(self.chunk_type.clone());
-				if a.is_none() {
+				if a.is_err() {
 					fail!("FIXME")
 				}
 				a.unwrap()
@@ -320,10 +321,10 @@ impl<R: Reader> PNGDecoder<R> {
 
 fn expand_palette(buf: &mut[u8], palette: &[(u8, u8, u8)], entries: uint) {
 	assert!(buf.len() == entries * 3);
-	let tmp = slice::from_fn(entries, |i| buf[i]);
+	let tmp = Vec::from_fn(entries, |i| buf[i]);
 
 	for (chunk, &i) in buf.mut_chunks(3).zip(tmp.iter()) {
-		let (r, g, b) = palette[i];
+		let (r, g, b) = palette[i as uint];
 		chunk[0] = r;
 		chunk[1] = g;
 		chunk[2] = b;
@@ -438,7 +439,7 @@ impl<R: Reader> Reader for IDATReader<R> {
 
 				match str::from_utf8(v.as_slice()) {
 					Some("IDAT") => (),
-					_ 			 => {
+					_ 	     => {
 						self.eof = true;
 						break
 					}
@@ -459,7 +460,7 @@ impl<R: Reader> Reader for IDATReader<R> {
 		Ok(start)
 	}
 }
-
+/*
 pub struct PNGEncoder<W> {
 	w: W,
 	crc: Crc32
@@ -514,7 +515,7 @@ impl<W: Writer> PNGEncoder<W> {
 	}
 }
 
-fn build_IHDR(width: u32, height: u32, c: colortype::ColorType) -> (~[u8], uint) {
+fn build_IHDR(width: u32, height: u32, c: colortype::ColorType) -> (Vec<u8>, uint) {
 	let mut m = MemWriter::with_capacity(13);
 
 	let _ = m.write_be_u32(width);
@@ -563,7 +564,7 @@ fn build_IHDR(width: u32, height: u32, c: colortype::ColorType) -> (~[u8], uint)
 
 fn filter(method: u8, bpp: uint, previous: &[u8], current: &mut [u8]) {
 	let len  = current.len();
-	let orig = slice::from_fn(len, |i| current[i]);
+	let orig = Vec::from_fn(len, |i| current[i]);
 
 	match method {
 		NOFILTER => (),
@@ -620,14 +621,14 @@ fn select_filter(rowlength: uint, bpp: uint, previous: &[u8], current_s: &mut [u
 	method
 }
 
-fn build_IDAT(image: &[u8], bpp: uint, width: u32, height: u32) -> ~[u8] {
+fn build_IDAT(image: &[u8], bpp: uint, width: u32, height: u32) -> Vec<u8> {
 	use flate::deflate_bytes_zlib;
 
 	let rowlen = bpp * width as uint;
 
-	let mut p = slice::from_elem(rowlen, 0u8);
-	let mut c = slice::from_elem(4 * rowlen, 0u8);
-	let mut b = slice::from_elem(height as uint + rowlen * height as uint, 0u8);
+	let mut p = Vec::from_elem(rowlen, 0u8);
+	let mut c = Vec::from_elem(4 * rowlen, 0u8);
+	let mut b = Vec::from_elem(height as uint + rowlen * height as uint, 0u8);
 
 	for (row, outrow) in image.chunks(rowlen).zip(b.mut_chunks(1 + rowlen)) {
 		for s in c.mut_chunks(rowlen) {
@@ -649,4 +650,4 @@ fn build_IDAT(image: &[u8], bpp: uint, width: u32, height: u32) -> ~[u8] {
 	}
 
 	deflate_bytes_zlib(b).as_slice().to_owned()
-}
+}*/
