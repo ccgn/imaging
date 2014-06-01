@@ -37,14 +37,14 @@ fn main() {
 	let mut fin = File::open(&Path::new(file.clone())).unwrap();
 	let buf = fin.read_to_end().unwrap();
 
-	let m = MemReader::new(buf);
+	let mut m = MemReader::new(buf);
 
 	let now = time::precise_time_ns();
 	let (out, w, h, c) = match file.split('.').last() {
 		Some("jpg") | Some("jpeg") => {
-			let mut j = JPEGDecoder::new(m);
+			let mut j = JPEGDecoder::new();
 
-			let a = j.decode_image().unwrap();
+			let a = j.decode(&mut m).unwrap();
 			let (b, c) = j.dimensions();
 			let d = j.color_type();
 
