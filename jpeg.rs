@@ -342,7 +342,7 @@ impl<R: Reader>JPEGDecoder<R> {
 		Ok(())
 	}
 
-	fn read_frame_header(&mut self) -> IoResult<()> {
+	fn read_frame_header(&mut self) -> Result<(), HuffError> {
 		let _frame_length = try!(self.r.read_be_u16());
 
 		let sample_precision = try!(self.r.read_u8());
@@ -363,7 +363,7 @@ impl<R: Reader>JPEGDecoder<R> {
 		self.read_frame_components(self.num_components)
 	}
 
-	fn read_frame_components(&mut self, n: u8) -> IoResult<()> {
+	fn read_frame_components(&mut self, n: u8) -> Result<(), HuffError> {
 		let mut blocks_per_mcu = 0;
 		for _ in range(0, n) {
 			let id = try!(self.r.read_u8());
@@ -412,7 +412,7 @@ impl<R: Reader>JPEGDecoder<R> {
 		Ok(())
 	}
 
-	fn read_scan_header(&mut self) -> IoResult<()> {
+	fn read_scan_header(&mut self) -> Result<(), HuffError> {
 		let _scan_length = try!(self.r.read_be_u16());
 
 		let num_scan_components = try!(self.r.read_u8());
@@ -441,7 +441,7 @@ impl<R: Reader>JPEGDecoder<R> {
 		Ok(())
 	}
 
-	fn read_quantization_tables(&mut self) -> IoResult<()> {
+	fn read_quantization_tables(&mut self) -> Result<(), HuffError> {
 		let mut table_length = try!(self.r.read_be_u16()) as i32;
 		table_length -= 2;
 
@@ -462,7 +462,7 @@ impl<R: Reader>JPEGDecoder<R> {
 		Ok(())
 	}
 
-	fn read_huffman_tables(&mut self) -> IoResult<()> {
+	fn read_huffman_tables(&mut self) -> Result<(), HuffError> {
 		let mut table_length = try!(self.r.read_be_u16());
 		table_length -= 2;
 
@@ -493,7 +493,7 @@ impl<R: Reader>JPEGDecoder<R> {
 	}
 
 
-	fn read_restart_interval(&mut self) -> IoResult<()> {
+	fn read_restart_interval(&mut self) -> Result<(), HuffError> {
 		let _length = try!(self.r.read_be_u16());
 		self.interval = try!(self.r.read_be_u16());
 
