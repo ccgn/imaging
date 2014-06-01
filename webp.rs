@@ -47,7 +47,7 @@ impl<R: Reader> WebpDecoder<R> {
 		colortype::Grey(8)
 	}
 
-	pub fn decode_image(&mut self) -> IoResult<~[u8]> {
+	pub fn decode_image(&mut self) -> IoResult<Vec<u8>> {
 		let _size = try!(self.read_riff_header());
 		let _ = try!(self.read_vp8_header());
 

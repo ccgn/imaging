@@ -12,7 +12,7 @@ use png::PNGDecoder;
 use png::PNGEncoder;
 use gif::GIFDecoder;
 use ppm::PPMEncoder;
-//use webp::WebpDecoder;
+use webp::WebpDecoder;
 
 mod colortype;
 mod hash;
@@ -24,8 +24,8 @@ mod jpeg;
 mod png;
 mod gif;
 mod ppm;
-//mod vp8;
-//mod webp;
+mod vp8;
+mod webp;
 
 fn main() {
 	let file = if os::args().len() == 2 {
@@ -73,7 +73,6 @@ fn main() {
 
 			(a, b, c, d)
 		}
-		/*
 		Some("webp") => {
 			let mut w = WebpDecoder::new(m);
 			let a = w.decode_image().unwrap();
@@ -82,7 +81,7 @@ fn main() {
 
 			(a, b, c, d)
 
-		}*/
+		}
 		_ => fail!("unimplemented image extension")
 	};
 	let after = time::precise_time_ns();
