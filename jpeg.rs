@@ -85,9 +85,7 @@ enum JPEGError {
 	NotEnoughData,
 }
 
-pub struct JPEGDecoder<R> {
-	r: R,
-
+pub struct JPEGDecoder {
 	qtables: [u8, ..64 * 4],
 	dctables: [HuffTable, ..2],
 	actables: [HuffTable, ..2],
@@ -115,13 +113,11 @@ pub struct JPEGDecoder<R> {
 	mcux: u16
 }
 
-impl<R: Reader>JPEGDecoder<R> {
-	pub fn new(r: R) -> JPEGDecoder<R> {
+impl JPEGDecoder {
+	pub fn new() -> JPEGDecoder {
 		let h: HuffTable  = Default::default();
 
 		JPEGDecoder {
-			r: r,
-
 			qtables: [0u8, ..64 * 4],
 			dctables: [h.clone(), h.clone()],
 			actables: [h.clone(), h.clone()],
@@ -203,6 +199,26 @@ impl<R: Reader>JPEGDecoder<R> {
 		self.row_count = (self.row_count + 1) % (self.vmax * 8);
 
 		Ok(buf.len())
+	}
+
+	pub fn decode<R: Reader>(&mut self, r: &mut R) -> IoResult<~[u8]> {
+		let buf = try!(r.read_to_end());
+		self.feed(buf);
+
+		let row = self.rowlen();
+		let mut image = slice::from_elem(row * self.height as uint, 0u8);
+
+		let _ = self.read_metadata();
+
+		for chunk in image.mut_chunks(row) {
+			let _len = self.read_scanline(chunk).unwrap();
+		}
+
+		Ok(image)
+	}
+
+	pub fn feed(&mut self, buf: &[u8]) {
+		self.h.feed(buf);
 	}
 
 	fn decode_mcu_row(&mut self) -> Result<(), HuffError> {
@@ -295,13 +311,13 @@ impl<R: Reader>JPEGDecoder<R> {
 
 	fn read_metadata(&mut self) -> Result<(), HuffError> {
 		while self.state != HaveFirstScan {
-			let byte = try!(self.r.read_u8());
+			let byte = try!(self.h.get_byte());
 
 			if byte != 0xFF {
 				continue;
 			}
 
-			let marker = try!(self.r.read_u8());
+			let marker = try!(self.h.get_byte());
 
 			match marker {
 				SOI => self.state = HaveSOI,
@@ -323,8 +339,8 @@ impl<R: Reader>JPEGDecoder<R> {
 				DRI => try!(self.read_restart_interval()),
 
 				APP0 .. APPF | COM => {
-					let length = try!(self.r.read_be_u16());
-					let _ = try!(self.r.read_exact((length -2) as uint));
+					let length = try!(self.h.get_be_16());
+					let _ = try!(self.h.get_bytes((length -2) as uint));
 				}
 
 				TEM  => continue,
@@ -343,14 +359,14 @@ impl<R: Reader>JPEGDecoder<R> {
 	}
 
 	fn read_frame_header(&mut self) -> Result<(), HuffError> {
-		let _frame_length = try!(self.r.read_be_u16());
+		let _frame_length = try!(self.h.get_be_16());
 
-		let sample_precision = try!(self.r.read_u8());
+		let sample_precision = try!(self.h.get_byte());
 		assert!(sample_precision == 8);
 
-		self.height 		  = try!(self.r.read_be_u16());
-		self.width  		  = try!(self.r.read_be_u16());
-		self.num_components   = try!(self.r.read_u8());
+		self.height 		  = try!(self.h.get_be_16());
+		self.width  		  = try!(self.h.get_be_16());
+		self.num_components   = try!(self.h.get_byte());
 
 		if self.height == 0 {
 			fail!("DNL not supported")
@@ -366,9 +382,9 @@ impl<R: Reader>JPEGDecoder<R> {
 	fn read_frame_components(&mut self, n: u8) -> Result<(), HuffError> {
 		let mut blocks_per_mcu = 0;
 		for _ in range(0, n) {
-			let id = try!(self.r.read_u8());
-			let hv = try!(self.r.read_u8());
-			let tq = try!(self.r.read_u8());
+			let id = try!(self.h.get_byte());
+			let hv = try!(self.h.get_byte());
+			let tq = try!(self.h.get_byte());
 
 			let c = Component {
 				id: id,
@@ -413,14 +429,14 @@ impl<R: Reader>JPEGDecoder<R> {
 	}
 
 	fn read_scan_header(&mut self) -> Result<(), HuffError> {
-		let _scan_length = try!(self.r.read_be_u16());
+		let _scan_length = try!(self.h.get_be_16());
 
-		let num_scan_components = try!(self.r.read_u8());
+		let num_scan_components = try!(self.h.get_byte());
 
 		self.scan_components = ~[];
 		for _ in range(0, num_scan_components as uint) {
-			let id = try!(self.r.read_u8());
-			let tables = try!(self.r.read_u8());
+			let id = try!(self.h.get_byte());
+			let tables = try!(self.h.get_byte());
 
 			let c = self.components.find_mut(&(id as uint)).unwrap();
 
@@ -430,10 +446,10 @@ impl<R: Reader>JPEGDecoder<R> {
 			self.scan_components.push(id);
 		}
 
-		let _spectral_end   = try!(self.r.read_u8());
-		let _spectral_start = try!(self.r.read_u8());
+		let _spectral_end   = try!(self.h.get_byte());
+		let _spectral_start = try!(self.h.get_byte());
 
-		let approx = try!(self.r.read_u8());
+		let approx = try!(self.h.get_byte());
 
 		let _approx_high = approx >> 4;
 		let _approx_low  = approx & 0x0F;
@@ -442,11 +458,11 @@ impl<R: Reader>JPEGDecoder<R> {
 	}
 
 	fn read_quantization_tables(&mut self) -> Result<(), HuffError> {
-		let mut table_length = try!(self.r.read_be_u16()) as i32;
+		let mut table_length = try!(self.h.get_be_16()) as i32;
 		table_length -= 2;
 
 		while table_length > 0 {
-			let pqtq = try!(self.r.read_u8());
+			let pqtq = try!(self.h.get_byte());
 			let pq = pqtq >> 4;
 			let tq = pqtq & 0x0F;
 
@@ -454,7 +470,10 @@ impl<R: Reader>JPEGDecoder<R> {
 			assert!(tq <= 3);
 
 			let slice = self.qtables.mut_slice(64 * tq as uint, 64 * tq as uint + 64);
-			let _ = try!(self.r.fill(slice));
+
+			for i in range(0, slice.len()) {
+				slice[i] = try!(self.h.get_byte());
+			}
 
 			table_length -= 1 + 64;
 		}
@@ -463,21 +482,21 @@ impl<R: Reader>JPEGDecoder<R> {
 	}
 
 	fn read_huffman_tables(&mut self) -> Result<(), HuffError> {
-		let mut table_length = try!(self.r.read_be_u16());
+		let mut table_length = try!(self.h.get_be_16());
 		table_length -= 2;
 
 		while table_length > 0 {
-			let tcth = try!(self.r.read_u8());
+			let tcth = try!(self.h.get_byte());
 			let tc = tcth >> 4;
 			let th = tcth & 0x0F;
 
 			assert!(tc == 0 || tc == 1);
 
-			let bits = try!(self.r.read_exact(16));
+			let bits = try!(self.h.get_bytes(16));
 			let len = bits.len();
 
 			let mt = bits.iter().fold(0, |a, b| a + *b);
-			let huffval = try!(self.r.read_exact(mt as uint));
+			let huffval = try!(self.h.get_bytes(mt as uint));
 
 			if tc == 0 {
 				self.dctables[th] = derive_tables(bits, huffval);
@@ -494,8 +513,8 @@ impl<R: Reader>JPEGDecoder<R> {
 
 
 	fn read_restart_interval(&mut self) -> Result<(), HuffError> {
-		let _length = try!(self.r.read_be_u16());
-		self.interval = try!(self.r.read_be_u16());
+		let _length = try!(self.h.get_be_16());
+		self.interval = try!(self.h.get_be_16());
 
 		Ok(())
 	}
@@ -536,10 +555,10 @@ impl<R: Reader>JPEGDecoder<R> {
 
 		let mut b;
 		loop {
-			b = try!(self.r.read_u8());
+			b = try!(self.h.get_byte());
 
 			if b == 0xFF {
-				b = try!(self.r.read_u8());
+				b = try!(self.h.get_byte());
 				match b {
 					RST0 .. RST7 => break,
 					EOI => fail!("unexpected end of image"),
@@ -686,7 +705,7 @@ impl HuffDecoder {
 		self.active = backup.clone();
 	}
 
-	fn get_byte(&mut self) -> Result<u8, HuffError> {
+	pub fn get_byte(&mut self) -> Result<u8, HuffError> {
 		if self.active.index < self.buf.len() {
 			let byte = self.buf[self.active.index];
 			self.active.index += 1;
@@ -697,6 +716,23 @@ impl HuffDecoder {
 		}
 	}
 
+	pub fn get_be_u16(&mut self) -> Result<u16, HuffError> {
+		let b1 = try!(self.get_byte());
+		let b2 = try!(self.get_byte());
+
+		Ok(b1 as u16 | (b2 as u16 << 8))
+	}
+
+	pub fn get_bytes(&mut self, n: uint) -> Result<~[u8], HuffError> {
+		let mut buf = ~[];
+
+		for _ in range(0, n) {
+			let b = try!(self.get_byte());
+			buf.push(b);
+		}
+
+		Ok(buf)
+	}
 
 	fn guarantee<R: Reader>(&mut self, n: u8) -> Result<(), HuffError> {
 		while self.active.num_bits < n && !self.active.end {
