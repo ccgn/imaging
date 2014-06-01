@@ -64,12 +64,12 @@ struct HuffTable {
 #[deriving(Clone)]
 struct Component {
 	id: u8,
-    h: u8,
-    v: u8,
-    tq: u8,
-    dc_table: u8,
-    ac_table: u8,
-    dc_pred: i32
+	h: u8,
+	v: u8,
+	tq: u8,
+	dc_table: u8,
+	ac_table: u8,
+	dc_pred: i32
 }
 
 #[deriving(Eq)]
@@ -79,6 +79,10 @@ enum JPEGState {
 	HaveFirstFrame,
 	HaveFirstScan,
 	End
+}
+
+enum JPEGError {
+	NotEnoughData,
 }
 
 pub struct JPEGDecoder<R> {
@@ -108,6 +112,7 @@ pub struct JPEGDecoder<R> {
 
 	row_count: u8,
 	state: JPEGState,
+	mcux: u16
 }
 
 impl<R: Reader>JPEGDecoder<R> {
@@ -141,6 +146,7 @@ impl<R: Reader>JPEGDecoder<R> {
 
 			row_count: 0,
 			state: Start,
+			mcux: 0
 		}
 	}
 
@@ -157,20 +163,30 @@ impl<R: Reader>JPEGDecoder<R> {
 		self.width as uint * self.num_components as uint
 	}
 
-	pub fn read_scanline(&mut self, buf: &mut [u8]) -> IoResult<uint> {
+	pub fn read_scanline(&mut self, buf: &mut [u8]) -> Result<uint, JPEGError> {
 		if self.state == Start {
 			let _ = try!(self.read_metadata());
 		}
 
 		if self.row_count == 0 {
-			let _ = try!(self.decode_mcu_row());
+			let r = self.decode_mcu_row();
+
+			match r {
+				Err(InvalidHuffCode) => fail!("invalid huffman code"),
+				Err(NotEnoughData)   => {
+					self.h.rollback();
+					return Err(NotEnoughData)
+				}
+
+				_ => ()
+			}
 		}
 
 		let w = 8 * ((self.width as uint + 7) / 8);
 		let len = w * self.num_components as uint;
 
 		let slice = self.mcu_row.slice(self.row_count as uint * len,
-								       self.row_count as uint * len + buf.len());
+					       self.row_count as uint * len + buf.len());
 
 		slice::bytes::copy_memory(buf, slice);
 		self.row_count = (self.row_count + 1) % (self.vmax * 8);
@@ -178,33 +194,24 @@ impl<R: Reader>JPEGDecoder<R> {
 		Ok(buf.len())
 	}
 
-	pub fn decode_image(&mut self) -> IoResult<~[u8]> {
-		if self.state == Start {
-			let _ = try!(self.read_metadata());
-		}
-
-		let row = self.rowlen();
-		let mut buf = slice::from_elem(row * self.height as uint, 0u8);
-
-		for chunk in buf.mut_chunks(row) {
-			let _len = try!(self.read_scanline(chunk));
-		}
-
-		Ok(buf)
-	}
-
-	fn decode_mcu_row(&mut self) -> IoResult<()> {
+	fn decode_mcu_row(&mut self) -> Result<(), HuffError> {
+		let start = self.mcux as uint;
 		let w 	  = 8 * ((self.width as uint + 7) / 8);
 		let bpp   = self.num_components as uint;
-		for x0 in range_step(0, w * bpp, bpp * 8 * self.hmax as uint) {
+
+		for x0 in range_step(start, w * bpp, bpp * 8 * self.hmax as uint) {
 			let _ = try!(self.decode_mcu());
-			upsample_mcu(self.mcu_row, x0, w, bpp, self.mcu, self.hmax, self.vmax)
+
+			self.mcux = x0 as u16;
+			self.h.checkpoint();
+
+			upsample_mcu(self.mcu_row, x0, w, bpp, self.mcu, self.hmax, self.vmax);
 		}
 
 		Ok(())
 	}
 
-	fn decode_mcu(&mut self) -> IoResult<()> {
+	fn decode_mcu(&mut self) -> Result<(), HuffError> {
 		let mut i = 0;
 
 		let tmp = self.scan_components.clone();
@@ -225,7 +232,7 @@ impl<R: Reader>JPEGDecoder<R> {
 		self.read_restart()
 	}
 
-	fn decode_block(&mut self, i: uint, dc: u8, pred: i32, ac: u8, q: u8) -> IoResult<i32> {
+	fn decode_block(&mut self, i: uint, dc: u8, pred: i32, ac: u8, q: u8) -> Result<i32, HuffError> {
 		let zz   = self.mcu.mut_slice(i * 64, i * 64 + 64);
 		let mut tmp = [0i32, ..64];
 
@@ -480,7 +487,7 @@ impl<R: Reader>JPEGDecoder<R> {
 		Ok(())
 	}
 
-	fn read_restart(&mut self) -> IoResult<()> {
+	fn read_restart(&mut self) -> Result<(), HuffError> {
 		let w = (self.width + 7) / (self.hmax * 8) as u16;
 		let h = (self.height + 7) / (self.vmax * 8) as u16;
 
@@ -506,7 +513,7 @@ impl<R: Reader>JPEGDecoder<R> {
 		Ok(())
 	}
 
-	fn find_restart_marker(&mut self) -> IoResult<u8> {
+	fn find_restart_marker(&mut self) -> Result<u8, HuffError> {
 		if self.h.marker != 0 {
 			let m = self.h.marker;
 			self.h.marker = 0;
@@ -619,41 +626,89 @@ fn extend(v: i32, t: u8) -> i32 {
 	}
 }
 
-struct HuffDecoder {
+enum HuffError {
+	InvalidHuffCode,
+	NotEnoughData
+}
+
+#[deriving(Default, Clone)]
+struct EntropyState {
+	index: uint,
 	bits: u32,
 	num_bits: u8,
 	end: bool,
-	marker: u8,
+	marker: u8
+}
+
+struct HuffDecoder {
+	active: EntropyState,
+	backup: EntropyState,
+
+	buf: ~[u8],
 }
 
 impl HuffDecoder {
 	pub fn new() -> HuffDecoder {
-		HuffDecoder {bits: 0, num_bits: 0, end: false, marker: 0}
+		let es: EntropyState = Default::default();
+
+		HuffDecoder {
+			active: es.clone(),
+			backup: es.clone(),
+
+			buf: ~[]
+		}
 	}
 
-	fn guarantee<R: Reader>(&mut self, r: &mut R, n: u8) -> IoResult<()> {
-		while self.num_bits < n && !self.end {
-			let byte = try!(r.read_u8());
+	pub fn feed(&mut self, data: &[u8]) {
+		for &i in data.iter() {
+			self.buf.push(i);
+		}
+	}
+
+	pub fn checkpoint(&mut self) {
+		self.backup = active.clone();
+	}
+
+	pub fn rollback(&mut self) {
+		self.active = backup.clone();
+	}
+
+	fn get_byte(&mut self) -> Result<u8, HuffError> {
+		if self.active.index < self.buf.len() {
+			let byte = self.buf[self.active.index];
+			self.active.index += 1;
+
+			Ok(byte)
+		} else {
+			Err(NotEnoughData)
+		}
+	}
+
+
+	fn guarantee<R: Reader>(&mut self, n: u8) -> Result<(), HuffError> {
+		while self.active.num_bits < n && !self.active.end {
+			let byte = try!(self.get_byte());
 
 			if byte == 0xFF {
-				let byte2 = try!(r.read_u8());
+				let byte2 = try!(self.get_byte());
+
 				if byte2 != 0 {
-					self.marker = byte2;
-					self.end = true;
+					self.active.marker = byte2;
+					self.active.end = true;
 				}
 			}
 
-			self.bits |= (byte as u32 << (32 - 8)) >> self.num_bits as u32;
-			self.num_bits += 8;
+			self.active.bits |= (byte as u32 << (32 - 8)) >> self.active.num_bits as u32;
+			self.active.num_bits += 8;
 		}
 
 		Ok(())
 	}
 
-	pub fn read_bit<R: Reader>(&mut self, r: &mut R) -> IoResult<u8> {
+	pub fn read_bit<R: Reader>(&mut self) -> Result<u8, HuffError> {
 		let _ = try!(self.guarantee(r, 1));
 
-		let bit = (self.bits & (1 << 31)) >> 31;
+		let bit = (self.active.bits & (1 << 31)) >> 31;
 		self.consume(1);
 
 		Ok(bit as u8)
@@ -661,29 +716,29 @@ impl HuffDecoder {
 
 	//Section F.2.2.4
 	//Figure F.17
-	pub fn receive<R: Reader>(&mut self, r: &mut R, ssss: u8) -> IoResult<i32> {
+	pub fn receive<R: Reader>(&mut self, ssss: u8) -> Result<i32, HuffError> {
 		let _ = try!(self.guarantee(r, ssss));
 
-		let bits = (self.bits & (0xFFFFFFFFu32 << (32 - ssss as u32))) >> (32 - ssss);
+		let bits = (self.active.bits & (0xFFFFFFFFu32 << (32 - ssss as u32))) >> (32 - ssss);
 		self.consume(ssss);
 
 		Ok(bits as i32)
 	}
 
 	fn consume(&mut self, n: u8) {
-		self.bits <<= n as u32;
-		self.num_bits -= n;
+		self.active.bits <<= n as u32;
+		self.active.num_bits -= n;
 	}
 
-	pub fn decode_symbol<R: Reader>(&mut self, r: &mut R, table: &HuffTable) -> IoResult<u8> {
+	pub fn decode_symbol<R: Reader>(&mut self, table: &HuffTable) -> Result<u8, HuffError> {
 		let _ = try!(self.guarantee(r, 8));
-		let index = (self.bits & 0xFF000000) >> (32 - 8);
+		let index = (self.active.bits & 0xFF000000) >> (32 - 8);
 		let (val, size) = table.lut[index];
 
 		if index < 256 && size < 9 {
 			self.consume(size);
 
-			return Ok(val)
+			Ok(val)
 		}
 		else {
 			let mut code = 0u;
@@ -699,7 +754,7 @@ impl HuffDecoder {
 				code <<= 1;
 			}
 
-			fail!(format!("bad huffman code: {:t}", code));
+			Err(InvalidHuffCode)
 		}
 	}
 }
