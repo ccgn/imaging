@@ -1,4 +1,4 @@
-#[deriving(Eq)]
+#[deriving(PartialEq, Show)]
 pub enum ColorType {
 	Grey(u8),
 	RGB(u8),

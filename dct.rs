@@ -1,5 +1,5 @@
-//Both forward dct's output coefficients scaled by 8
-//Both inverse dct's output samples clamped to the range [0, 255]
+//The forward dct's output coefficients are scaled by 8
+//The inverse dct's output samples are clamped to the range [0, 255]
 
 fn level_shift_down(a: u8) -> i32 {
 	a as i32 - 128
@@ -86,7 +86,7 @@ pub mod fast {
 		//Pass 1: process rows.
 		//Results are scaled by sqrt(8) compared to a true DCT
 		//furthermore we scale the results by 2**PASS1_BITS
-		for y in range(0, 8) {
+		for y in range(0u, 8) {
 			let y0 = y * 8;
 
 			//Even part
@@ -150,7 +150,7 @@ pub mod fast {
 		//Pass 2: process columns
 		//We remove the PASS1_BITS scaling but leave the results scaled up an
 		//overall factor of 8
-		for x in range(0, 8).rev() {
+		for x in range(0u, 8).rev() {
 			//Even part
 			let t0 = coeffs[x + 8 * 0] + coeffs[x + 8 * 7];
 			let t1 = coeffs[x + 8 * 1] + coeffs[x + 8 * 6];
@@ -213,7 +213,7 @@ pub mod fast {
 	pub fn idct(coeffs: &[i32], samples: &mut [u8]) {
 		let mut tmp = [0i32, ..64];
 
-		for x in range(0, 8).rev() {
+		for x in range(0u, 8).rev() {
 			if coeffs[x + 8 * 1] == 0 && coeffs[x + 8 * 2] == 0 && coeffs[x + 8 * 3] == 0 &&
 			coeffs[x + 8 * 4] == 0 && coeffs[x + 8 * 5] == 0 && coeffs[x + 8 * 6] == 0 &&
 			coeffs[x + 8 * 7] == 0 {
@@ -290,7 +290,7 @@ pub mod fast {
 			tmp[x + 8 * 4] = (t13 - t0) >> (CONST_BITS - PASS1_BITS);
 		}
 
-		for y in range(0, 8) {
+		for y in range(0u, 8) {
 			let y0 = y * 8;
 
 			let z2 = tmp[y0 + 2];
@@ -360,67 +360,6 @@ pub mod fast {
 
 			let a = (t13 - t0) >> (CONST_BITS + PASS1_BITS + 3);
 			samples[y0 + 4] = level_shift_up(a);
-		}
-	}
-}
-
-pub mod slow {
-	use std::f32;
-	use super::level_shift_up;
-	use super::level_shift_down;
-
-	#[allow(dead_code)]
-	pub fn fdct(samples: &[u8], coeffs: &mut [i32]) {
-		let a = 1.0 / f32::sqrt(2 as f32);
-
-		for v in range(0, 8) {
-			for u in range(0, 8) {
-				let mut sum = 0f32;
-
-				for x in range(0, 8) {
-					for y in range(0, 8) {
-						let syx = level_shift_down(samples[x + 8 * y]) as f32 * 8f32;
-
-						let i = f32::cos(((2 * x + 1) as f32 * u as f32 * f32::consts::PI) / 16f32);
-						let j = f32::cos(((2 * y + 1) as f32 * v as f32 * f32::consts::PI) / 16f32);
-
-						sum += syx * i * j;
-					}
-				}
-
-				let cu = if u == 0 {a} else {1f32};
-				let cv = if v == 0 {a} else {1f32};
-
-				coeffs[u + 8 * v] = f32::round((cu * cv * sum) / 4f32) as i32;
-			}
-		}
-	}
-
-	#[allow(dead_code)]
-	pub fn idct(coeffs: &[i32], samples: &mut [u8]) {
-		let a = 1.0 / f32::sqrt(2 as f32);
-
-		for y in range(0, 8) {
-			for x in range(0, 8) {
-				let mut sum = 0f32;
-
-				for u in range(0, 8) {
-					for v in range(0, 8) {
-						let cu = if u == 0 {a} else {1f32};
-						let cv = if v == 0 {a} else {1f32};
-
-						let svu = coeffs[v + 8 * u] as f32;
-
-						let i = f32::cos(((2 * x + 1) as f32 * v as f32 * f32::consts::PI) / 16f32);
-						let j = f32::cos(((2 * y + 1) as f32 * u as f32 * f32::consts::PI) / 16f32);
-
-						sum += cu * cv * svu * i * j;
-					}
-				}
-
-				let s = sum / 4f32;
-				samples[x + 8 * y] = level_shift_up(f32::round(s) as i32);
-			}
 		}
 	}
 }

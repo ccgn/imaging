@@ -17,7 +17,7 @@ impl<W: Writer> PPMEncoder<W> {
 	pub fn encode(&mut self, im: &[u8], w: u32, h: u32, c: colortype::ColorType) -> IoResult<()> {
 		let _ = try!(self.write_magic_number());
 		let _ = try!(self.write_metadata(w, h, c));
-		
+
 		self.write_image(im, c, w, h)
 	}
 
@@ -30,7 +30,7 @@ impl<W: Writer> PPMEncoder<W> {
 		let h = height.to_str_radix(10);
 		let m = max_pixel_value(pixel_type);
 
-		self.w.write_str(format!("{0} {1}\n{2}\n", w, h, m))
+		self.w.write_str(format!("{0} {1}\n{2}\n", w, h, m).as_slice())
 	}
 
 	fn write_image(&mut self, buf: &[u8], pixel_type: colortype::ColorType, width: u32, height: u32) -> IoResult<()> {
@@ -52,7 +52,8 @@ impl<W: Writer> PPMEncoder<W> {
 					let _ = try!(self.w.write_u8(x[2]));
 				}
 			}
-			a => fail!(format!("not implemented: {:?}", a))
+
+			a => fail!(format!("not implemented: {}", a))
 		}
 
 		Ok(())
@@ -61,12 +62,12 @@ impl<W: Writer> PPMEncoder<W> {
 
 fn max_pixel_value(pixel_type: colortype::ColorType) -> u16 {
 	let max = match pixel_type {
-		Grey(n)    => num::pow(2, n as uint) - 1, 
-		RGB(n)     => num::pow(2, n as uint) - 1, 
-		Palette(n) => num::pow(2, n as uint) - 1, 
-		GreyA(n)   => num::pow(2, n as uint) - 1, 
+		Grey(n)    => num::pow(2, n as uint) - 1,
+		RGB(n)     => num::pow(2, n as uint) - 1,
+		Palette(n) => num::pow(2, n as uint) - 1,
+		GreyA(n)   => num::pow(2, n as uint) - 1,
 		RGBA(n)    => num::pow(2, n as uint) - 1
 	};
 
-	max as u16	
+	max as u16
 }

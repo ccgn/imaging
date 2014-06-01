@@ -1,35 +1,35 @@
 extern crate collections;
 extern crate time;
-extern crate flate;
+//extern crate flate;
 
 use std::os;
 use std::io::File;
 use std::io::MemReader;
 
 use jpeg::JPEGDecoder;
-use jpeg::JPEGEncoder;
-use png::PNGDecoder;
-use png::PNGEncoder;
-use gif::GIFDecoder;
+//use jpeg::JPEGEncoder;
+//use png::PNGDecoder;
+//use png::PNGEncoder;
+//use gif::GIFDecoder;
 use ppm::PPMEncoder;
-use webp::WebpDecoder;
+//use webp::WebpDecoder;
 
 mod colortype;
-mod hash;
-mod deflate;
-mod zlib;
-mod lzw;
+//mod hash;
+//mod deflate;
+//mod zlib;
+//mod lzw;
 mod dct;
 mod jpeg;
-mod png;
-mod gif;
+//mod png;
+//mod gif;
 mod ppm;
-mod vp8;
-mod webp;
+//mod vp8;
+//mod webp;
 
 fn main() {
 	let file = if os::args().len() == 2 {
-		os::args()[1]
+		os::args().as_slice()[1].clone()
 	} else {
 		fail!("provide a file")
 	};
@@ -40,7 +40,7 @@ fn main() {
 	let m = MemReader::new(buf);
 
 	let now = time::precise_time_ns();
-	let (out, w, h, c) = match file.split('.').last() {
+	let (out, w, h, c) = match file.as_slice().split('.').last() {
 		Some("jpg") | Some("jpeg") => {
 			let mut j = JPEGDecoder::new(m);
 
@@ -49,7 +49,7 @@ fn main() {
 			let d = j.color_type();
 
 			(a, b, c, d)
-		}
+		}/*
 		Some("png") => {
 			let mut p = PNGDecoder::new(m);
 
@@ -81,18 +81,18 @@ fn main() {
 
 			(a, b, c, d)
 
-		}
+		}*/
 		_ => fail!("unimplemented image extension")
 	};
 	let after = time::precise_time_ns();
 
 	println!("{0} x {1} pixels", w, h);
-	println!("{:?}", c);
+	println!("{}", c);
 	println!("{} bytes", out.len());
 	println!("decoded in {} ms", (after - now) / (1000 * 1000));
 
-	let t = out.clone();
-	spawn(proc() {
+	//let t = out.clone();
+	/*spawn(proc() {
 		let fout = File::create(&Path::new(os::args()[1] + ".jpg")).unwrap();
 
 		let now = time::precise_time_ns();
@@ -122,5 +122,5 @@ fn main() {
 		let after = time::precise_time_ns();
 
 		println!("encoded png in {} ms", (after - now) / (1000 * 1000));
-	});
+	});*/
 }
