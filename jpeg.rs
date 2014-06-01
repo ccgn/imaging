@@ -165,7 +165,18 @@ impl<R: Reader>JPEGDecoder<R> {
 
 	pub fn read_scanline(&mut self, buf: &mut [u8]) -> Result<uint, JPEGError> {
 		if self.state == Start {
-			let _ = try!(self.read_metadata());
+			let r = self.read_metadata();
+
+			match r {
+				Err(InvalidHuffCode) => fail!("invalid huffman code"),
+				Err(NotEnoughData)   => {
+					self.h.rollback();
+					self.state = Start;
+					returnn Err(NotEnoughData)
+				}
+
+				_ => ()
+			}
 		}
 
 		if self.row_count == 0 {
@@ -282,7 +293,7 @@ impl<R: Reader>JPEGDecoder<R> {
 		Ok(dc)
 	}
 
-	fn read_metadata(&mut self) -> IoResult<()> {
+	fn read_metadata(&mut self) -> Result<(), HuffError> {
 		while self.state != HaveFirstScan {
 			let byte = try!(self.r.read_u8());
 
@@ -325,6 +336,8 @@ impl<R: Reader>JPEGDecoder<R> {
 				a    => fail!(format!("unexpected marker {:X}\n", a))
 			}
 		}
+
+		self.h.checkpoint();
 
 		Ok(())
 	}
