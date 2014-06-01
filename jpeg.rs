@@ -82,7 +82,7 @@ enum JPEGState {
 }
 
 enum JPEGError {
-	NotEnoughData,
+	Suspended,
 }
 
 pub struct JPEGDecoder {
@@ -98,6 +98,7 @@ pub struct JPEGDecoder {
 	num_components: u8,
 	scan_components: ~[u8],
 	components: SmallIntMap<Component>,
+	cbackup: SmallIntMap<Component>,
 
 	mcu_row: ~[u8],
 	mcu: ~[u8],
@@ -130,6 +131,7 @@ impl JPEGDecoder {
 			num_components: 0,
 			scan_components: ~[],
 			components: SmallIntMap::new(),
+			cbackup : SmallIntMap::new(),
 
 			mcu_row: ~[],
 			mcu: ~[],
@@ -159,16 +161,46 @@ impl JPEGDecoder {
 		self.width as uint * self.num_components as uint
 	}
 
+	fn reset_metadata(&mut self) {
+		let h: HuffTable  = Default::default();
+
+		self.qtables = [0u8, ..64 * 4];
+		self.dctables = [h.clone(), h.clone()];
+		self.actables = [h.clone(), h.clone()];
+
+		self.height = 0;
+		self.width = 0;
+
+		self.num_components = 0;
+		self.scan_components = ~[];
+		self.components = SmallIntMap::new();
+
+		self.mcu_row = ~[];
+		self.mcu = ~[];
+		self.hmax = 0;
+		self.vmax = 0;
+
+		self.interval = 0;
+		self.mcucount = 0;
+		self.expected_rst = RST0;
+
+		self.row_count = 0;
+		self.state = Start;
+		self.mcux = 0;
+	}
+
 	pub fn read_scanline(&mut self, buf: &mut [u8]) -> Result<uint, JPEGError> {
 		if self.state == Start {
 			let r = self.read_metadata();
 
 			match r {
 				Err(InvalidHuffCode) => fail!("invalid huffman code"),
+
 				Err(NotEnoughData)   => {
 					self.h.rollback();
-					self.state = Start;
-					returnn Err(NotEnoughData)
+					self.reset_metadata();
+
+					return Err(Suspended)
 				}
 
 				_ => ()
@@ -180,12 +212,16 @@ impl JPEGDecoder {
 
 			match r {
 				Err(InvalidHuffCode) => fail!("invalid huffman code"),
+
 				Err(NotEnoughData)   => {
 					self.h.rollback();
-					return Err(NotEnoughData)
+					for (k, v) in self.cbackup.iter() {
+						self.components.insert(k, v.clone());
+					}
+					return Err(Suspended)
 				}
 
-				_ => ()
+				_ => self.mcux = 0,
 			}
 		}
 
@@ -203,15 +239,72 @@ impl JPEGDecoder {
 
 	pub fn decode<R: Reader>(&mut self, r: &mut R) -> IoResult<~[u8]> {
 		let buf = try!(r.read_to_end());
-		self.feed(buf);
+		//self.feed(buf);
+
+		let chunksize = 8 * 1024;
+
+		let mut i = 0;
+
+		loop {
+			let r = self.read_metadata();
+
+			match r {
+				Ok(_) => break,
+
+				Err(NotEnoughData) => {
+					let p = if i * chunksize + chunksize >= buf.len() {
+						buf.slice_from(i * chunksize)
+					} else {
+						buf.slice(i * chunksize, i * chunksize + chunksize)
+					};
+
+					self.h.rollback();
+					self.reset_metadata();
+					self.feed(p);
+
+					i += 1;
+
+				}
+
+				Err(_) => fail!("dsfsdf")
+			}
+		}
 
 		let row = self.rowlen();
-		let mut image = slice::from_elem(row * self.height as uint, 0u8);
+		let mut image = ~[];
 
-		let _ = self.read_metadata();
+		//for chunk in image.mut_chunks(row) {
+		//	let _len = self.read_scanline(chunk).unwrap();
+		//}
 
-		for chunk in image.mut_chunks(row) {
-			let _len = self.read_scanline(chunk).unwrap();
+		let mut s = slice::from_elem(row, 0u8);
+
+		let mut h = 0;
+
+		while h < self.height {
+			let r = self.read_scanline(s);
+
+			match r {
+				Ok(rowsize) => {
+					for i in range(0, rowsize) {
+						image.push(s[i]);
+					}
+					h += 1;
+				}
+
+				Err(Suspended) => {
+					let p = if i * chunksize + chunksize >= buf.len() {
+						buf.slice_from(i * chunksize)
+					} else {
+						buf.slice(i * chunksize, i * chunksize + chunksize)
+					};
+
+					//self.h.rollback();
+					self.feed(p);
+
+					i += 1;
+				}
+			}
 		}
 
 		Ok(image)
@@ -227,10 +320,18 @@ impl JPEGDecoder {
 		let bpp   = self.num_components as uint;
 
 		for x0 in range_step(start, w * bpp, bpp * 8 * self.hmax as uint) {
-			let _ = try!(self.decode_mcu());
-
 			self.mcux = x0 as u16;
+
+			let _ = try!(self.decode_mcu());
 			self.h.checkpoint();
+
+			let mut b = SmallIntMap::new();
+
+			for (k, v) in self.components.iter() {
+				b.insert(k, v.clone());
+			}
+
+			self.cbackup = b;
 
 			upsample_mcu(self.mcu_row, x0, w, bpp, self.mcu, self.hmax, self.vmax);
 		}
@@ -267,9 +368,9 @@ impl JPEGDecoder {
 		let actable = &self.actables[ac];
 		let qtable  = self.qtables.slice(64 * q as uint, 64 * q as uint + 64);
 
-		let t     = try!(self.h.decode_symbol(&mut self.r, dctable));
+		let t     = try!(self.h.decode_symbol(dctable));
 		let diff  = if t > 0 {
-			try!(self.h.receive(&mut self.r, t))
+			try!(self.h.receive(t))
 		} else {
 			0
 		};
@@ -283,7 +384,7 @@ impl JPEGDecoder {
 		let mut k = 0;
 
 		while k < 63 {
-			let rs = try!(self.h.decode_symbol(&mut self.r, actable));
+			let rs = try!(self.h.decode_symbol(actable));
 
 			let ssss = rs & 0x0F;
 			let rrrr = rs >> 4;
@@ -298,7 +399,7 @@ impl JPEGDecoder {
 				k += rrrr;
 
 				//Figure F.14
-				let t = try!(self.h.receive(&mut self.r, ssss));
+				let t = try!(self.h.receive(ssss));
 				tmp[UNZIGZAG[k + 1]] = extend(t, ssss) * qtable[k + 1] as i32;
 				k += 1;
 			}
@@ -339,8 +440,8 @@ impl JPEGDecoder {
 				DRI => try!(self.read_restart_interval()),
 
 				APP0 .. APPF | COM => {
-					let length = try!(self.h.get_be_16());
-					let _ = try!(self.h.get_bytes((length -2) as uint));
+					let length = try!(self.h.get_be_u16());
+					let _ = try!(self.h.get_bytes((length - 2) as uint));
 				}
 
 				TEM  => continue,
@@ -359,13 +460,13 @@ impl JPEGDecoder {
 	}
 
 	fn read_frame_header(&mut self) -> Result<(), HuffError> {
-		let _frame_length = try!(self.h.get_be_16());
+		let _frame_length = try!(self.h.get_be_u16());
 
 		let sample_precision = try!(self.h.get_byte());
 		assert!(sample_precision == 8);
 
-		self.height 		  = try!(self.h.get_be_16());
-		self.width  		  = try!(self.h.get_be_16());
+		self.height 		  = try!(self.h.get_be_u16());
+		self.width  		  = try!(self.h.get_be_u16());
 		self.num_components   = try!(self.h.get_byte());
 
 		if self.height == 0 {
@@ -429,7 +530,7 @@ impl JPEGDecoder {
 	}
 
 	fn read_scan_header(&mut self) -> Result<(), HuffError> {
-		let _scan_length = try!(self.h.get_be_16());
+		let _scan_length = try!(self.h.get_be_u16());
 
 		let num_scan_components = try!(self.h.get_byte());
 
@@ -458,7 +559,7 @@ impl JPEGDecoder {
 	}
 
 	fn read_quantization_tables(&mut self) -> Result<(), HuffError> {
-		let mut table_length = try!(self.h.get_be_16()) as i32;
+		let mut table_length = try!(self.h.get_be_u16()) as i32;
 		table_length -= 2;
 
 		while table_length > 0 {
@@ -482,7 +583,7 @@ impl JPEGDecoder {
 	}
 
 	fn read_huffman_tables(&mut self) -> Result<(), HuffError> {
-		let mut table_length = try!(self.h.get_be_16());
+		let mut table_length = try!(self.h.get_be_u16());
 		table_length -= 2;
 
 		while table_length > 0 {
@@ -513,8 +614,8 @@ impl JPEGDecoder {
 
 
 	fn read_restart_interval(&mut self) -> Result<(), HuffError> {
-		let _length = try!(self.h.get_be_16());
-		self.interval = try!(self.h.get_be_16());
+		let _length = try!(self.h.get_be_u16());
+		self.interval = try!(self.h.get_be_u16());
 
 		Ok(())
 	}
@@ -546,9 +647,9 @@ impl JPEGDecoder {
 	}
 
 	fn find_restart_marker(&mut self) -> Result<u8, HuffError> {
-		if self.h.marker != 0 {
-			let m = self.h.marker;
-			self.h.marker = 0;
+		if self.h.active.marker != 0 {
+			let m = self.h.active.marker;
+			self.h.active.marker = 0;
 
 			return Ok(m);
 		}
@@ -571,10 +672,10 @@ impl JPEGDecoder {
 	}
 
 	fn reset(&mut self) {
-		self.h.bits = 0;
-		self.h.num_bits = 0;
-		self.h.end = false;
-		self.h.marker = 0;
+		self.h.active.bits = 0;
+		self.h.active.num_bits = 0;
+		self.h.active.end = false;
+		self.h.active.marker = 0;
 
 		for (_, c) in self.components.mut_iter() {
 			c.dc_pred = 0;
@@ -681,7 +782,12 @@ struct HuffDecoder {
 
 impl HuffDecoder {
 	pub fn new() -> HuffDecoder {
-		let es: EntropyState = Default::default();
+		let mut es: EntropyState = Default::default();
+		es.index = 0;
+		es.bits = 0;
+		es.num_bits = 0;
+		es.end = false;
+		es.marker = 0;
 
 		HuffDecoder {
 			active: es.clone(),
@@ -698,11 +804,11 @@ impl HuffDecoder {
 	}
 
 	pub fn checkpoint(&mut self) {
-		self.backup = active.clone();
+		self.backup = self.active.clone();
 	}
 
 	pub fn rollback(&mut self) {
-		self.active = backup.clone();
+		self.active = self.backup.clone();
 	}
 
 	pub fn get_byte(&mut self) -> Result<u8, HuffError> {
@@ -720,7 +826,7 @@ impl HuffDecoder {
 		let b1 = try!(self.get_byte());
 		let b2 = try!(self.get_byte());
 
-		Ok(b1 as u16 | (b2 as u16 << 8))
+		Ok((b1 as u16) << 8 | b2 as u16)
 	}
 
 	pub fn get_bytes(&mut self, n: uint) -> Result<~[u8], HuffError> {
@@ -734,7 +840,7 @@ impl HuffDecoder {
 		Ok(buf)
 	}
 
-	fn guarantee<R: Reader>(&mut self, n: u8) -> Result<(), HuffError> {
+	fn guarantee(&mut self, n: u8) -> Result<(), HuffError> {
 		while self.active.num_bits < n && !self.active.end {
 			let byte = try!(self.get_byte());
 
@@ -754,8 +860,8 @@ impl HuffDecoder {
 		Ok(())
 	}
 
-	pub fn read_bit<R: Reader>(&mut self) -> Result<u8, HuffError> {
-		let _ = try!(self.guarantee(r, 1));
+	pub fn read_bit(&mut self) -> Result<u8, HuffError> {
+		let _ = try!(self.guarantee(1));
 
 		let bit = (self.active.bits & (1 << 31)) >> 31;
 		self.consume(1);
@@ -765,8 +871,8 @@ impl HuffDecoder {
 
 	//Section F.2.2.4
 	//Figure F.17
-	pub fn receive<R: Reader>(&mut self, ssss: u8) -> Result<i32, HuffError> {
-		let _ = try!(self.guarantee(r, ssss));
+	pub fn receive(&mut self, ssss: u8) -> Result<i32, HuffError> {
+		let _ = try!(self.guarantee(ssss));
 
 		let bits = (self.active.bits & (0xFFFFFFFFu32 << (32 - ssss as u32))) >> (32 - ssss);
 		self.consume(ssss);
@@ -779,8 +885,8 @@ impl HuffDecoder {
 		self.active.num_bits -= n;
 	}
 
-	pub fn decode_symbol<R: Reader>(&mut self, table: &HuffTable) -> Result<u8, HuffError> {
-		let _ = try!(self.guarantee(r, 8));
+	pub fn decode_symbol(&mut self, table: &HuffTable) -> Result<u8, HuffError> {
+		let _ = try!(self.guarantee(8));
 		let index = (self.active.bits & 0xFF000000) >> (32 - 8);
 		let (val, size) = table.lut[index];
 
@@ -793,7 +899,7 @@ impl HuffDecoder {
 			let mut code = 0u;
 
 			for i in range(0, 16) {
-				let b = try!(self.read_bit(r));
+				let b = try!(self.read_bit());
 				code |= b as uint;
 
 				if (code as int) <= table.maxcode[i] {
