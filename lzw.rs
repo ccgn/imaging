@@ -8,8 +8,8 @@ static MAXCODESIZE: u8 = 12;
 pub struct LZWReader<R> {
 	r: R,
 
-	dict: ~[Option<~[u8]>],
-	prev: ~[u8],
+	dict: Vec<Option<Vec<u8>>>,
+	prev: Vec<u8>,
 
 	accumulator: u32,
 	num_bits: u8,
@@ -23,23 +23,23 @@ pub struct LZWReader<R> {
 
 	eof: bool,
 
-	out: ~[u8],
+	out: Vec<u8>,
 	pos: uint
 }
 
 impl<R: Reader> LZWReader<R> {
 	pub fn new(r: R, size: u8) -> LZWReader<R> {
-		let mut dict = slice::from_elem(1 << MAXCODESIZE, None);
+		let mut dict = Vec::from_elem(1 << MAXCODESIZE, None);
 
 		for i in range(0, 1 << size) {
-			dict[i] = Some(~[i as u8])
+			dict.as_mut_slice()[i as uint] = Some(vec![i as u8])
 		}
 
 		LZWReader {
 			r: r,
 
 			dict: dict,
-			prev: ~[],
+			prev: Vec::new(),
 
 			accumulator: 0,
 			num_bits: 0,
@@ -51,7 +51,7 @@ impl<R: Reader> LZWReader<R> {
 			clear: 1 << size as u16,
 			end: (1 << size as u16) + 1,
 
-			out: ~[],
+			out: Vec::new(),
 			pos: 0,
 
 			eof: false
@@ -82,10 +82,10 @@ impl<R: Reader> LZWReader<R> {
 			if code == self.clear {
 				self.code_size = self.initial_size + 1;
 				self.next_code = self.end + 1;
-				self.dict = slice::from_elem(1 << MAXCODESIZE, None);
+				self.dict = Vec::from_elem(1 << MAXCODESIZE, None);
 
-				for i in range(0, 1 << self.initial_size) {
-					self.dict[i] = Some(~[i as u8])
+				for i in range(0u, 1 << self.initial_size as uint) {
+					self.dict.as_mut_slice()[i] = Some(vec![i as u8])
 				}
 
 				self.prev.clear();
@@ -98,15 +98,15 @@ impl<R: Reader> LZWReader<R> {
 				break
 			}
 
-			if self.dict[code].is_none() {
-				self.dict[code] = Some(self.prev.clone() + ~[self.prev[0]]);
+			if self.dict.as_slice()[code as uint].is_none() {
+				self.dict.as_mut_slice()[code as uint] = Some(self.prev.clone() + vec![self.prev.as_slice()[0]]);
 			}
 
 			if self.prev.len() > 0 {
 				let mut tmp = self.prev.clone();
-				tmp.push(self.dict[code].get_ref()[0]);
+				tmp.push(self.dict.as_slice()[code as uint].get_ref().as_slice()[0]);
 
-				self.dict[self.next_code as uint] = Some(tmp);
+				self.dict.as_mut_slice()[self.next_code as uint] = Some(tmp);
 				self.next_code += 1;
 
 				if self.next_code >= 1 << self.code_size as u16 {
@@ -114,9 +114,9 @@ impl<R: Reader> LZWReader<R> {
 				}
 			}
 
-			self.prev = self.dict[code].get_ref().to_owned();
+			self.prev = self.dict.as_slice()[code as uint].get_ref().clone();
 
-			for &s in self.dict[code].get_ref().iter() {
+			for &s in self.dict.as_slice()[code as uint].get_ref().iter() {
 				self.out.push(s);
 			}
 		}

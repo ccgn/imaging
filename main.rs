@@ -10,7 +10,7 @@ use jpeg::JPEGDecoder;
 use jpeg::JPEGEncoder;
 use png::PNGDecoder;
 use png::PNGEncoder;
-//use gif::GIFDecoder;
+use gif::GIFDecoder;
 use ppm::PPMEncoder;
 //use webp::WebpDecoder;
 
@@ -18,11 +18,11 @@ mod colortype;
 mod hash;
 mod deflate;
 mod zlib;
-//mod lzw;
+mod lzw;
 mod dct;
 mod jpeg;
 mod png;
-//mod gif;
+mod gif;
 mod ppm;
 //mod vp8;
 //mod webp;
@@ -59,7 +59,7 @@ fn main() {
 			let _ = p.palette();
 
 			(a, b, c, d)
-		}/*
+		}
 		Some("gif") => {
 			let mut g = GIFDecoder::new(m);
 
@@ -73,6 +73,7 @@ fn main() {
 
 			(a, b, c, d)
 		}
+		/*
 		Some("webp") => {
 			let mut w = WebpDecoder::new(m);
 			let a = w.decode_image().unwrap();

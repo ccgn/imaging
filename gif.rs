@@ -1,4 +1,3 @@
-use std::slice;
 use std::io::MemReader;
 use std::io::IoResult;
 
@@ -20,10 +19,10 @@ pub struct GIFDecoder <R> {
 	height: u16,
 
 	global_table: [(u8, u8, u8), ..256],
-	local_table: Option<~[(u8, u8, u8)]>,
+	local_table: Option<Vec<(u8, u8, u8)>>,
 
 	delay: u16,
-	image: ~[u8],
+	image: Vec<u8>,
 
 	global_backgroud_index: Option<u8>,
 	local_transparent_index: Option<u8>,
@@ -43,7 +42,7 @@ impl<R: Reader> GIFDecoder<R> {
 			local_table: None,
 
 			delay: 0,
-			image: ~[],
+			image: Vec::new(),
 
 			global_backgroud_index: None,
 			local_transparent_index: None,
@@ -63,15 +62,15 @@ impl<R: Reader> GIFDecoder<R> {
 		Ok(())
 	}
 
-	fn read_block(&mut self) -> IoResult<~[u8]> {
+	fn read_block(&mut self) -> IoResult<Vec<u8>> {
 		let size = try!(self.r.read_u8());
 		self.r.read_exact(size as uint)
 	}
 
-	fn read_image_data(&mut self) -> IoResult<~[u8]> {
+	fn read_image_data(&mut self) -> IoResult<Vec<u8>> {
 		let minimum_code_size = try!(self.r.read_u8());
 		assert!(minimum_code_size <= 8);
-		let mut data = ~[];
+		let mut data = Vec::new();
 
 		loop {
 			let b = try!(self.read_block());
@@ -108,10 +107,10 @@ impl<R: Reader> GIFDecoder<R> {
 		if local_table {
 			let n   = 1 << (table_size + 1);
 			let buf = try!(self.r.read_exact(3 * n));
-			let mut b = slice::from_elem(n, (0u8, 0u8, 0u8));
+			let mut b = Vec::from_elem(n, (0u8, 0u8, 0u8));
 
-			for (i, rgb) in buf.chunks(3).enumerate() {
-				b[i] = (rgb[0], rgb[1], rgb[2]);
+			for (i, rgb) in buf.as_slice().chunks(3).enumerate() {
+				b.as_mut_slice()[i] = (rgb[0], rgb[1], rgb[2]);
 			}
 
 			self.local_table = Some(b);
@@ -133,14 +132,14 @@ impl<R: Reader> GIFDecoder<R> {
 			};
 
 			expand_image(table,
-				     indices,
+				     indices.as_slice(),
 				     image_top as uint,
 				     image_left as uint,
 				     image_width as uint,
 				     image_height as uint,
 				     self.width as uint * 3,
 				     trans_index,
-				     self.image);
+				     self.image.as_mut_slice());
 		}
 
 		self.local_table = None;
@@ -208,9 +207,7 @@ impl<R: Reader> GIFDecoder<R> {
 	fn read_logical_screen_descriptor(&mut self) -> IoResult<()> {
 		self.width  = try!(self.r.read_le_u16());
 		self.height = try!(self.r.read_le_u16());
-		self.image  = slice::from_elem(self.width as uint *
-					       self.height as uint *
-					       3, 0u8);
+		self.image  = Vec::from_elem(self.width as uint * self.height as uint * 3, 0u8);
 
 		let fields = try!(self.r.read_u8());
 
@@ -227,8 +224,8 @@ impl<R: Reader> GIFDecoder<R> {
 
 		let buf = try!(self.r.read_exact(3 * entries));
 
-		for (i, rgb) in buf.chunks(3).enumerate() {
-			self.global_table[i] = (rgb[0], rgb[1], rgb[2]);
+		for (i, rgb) in buf.as_slice().chunks(3).enumerate() {
+			self.global_table.as_mut_slice()[i] = (rgb[0], rgb[1], rgb[2]);
 		}
 
 		Ok(())
@@ -246,7 +243,7 @@ impl<R: Reader> GIFDecoder<R> {
 		self.delay
 	}
 
-	pub fn decode_image(&mut self) -> IoResult<~[u8]> {
+	pub fn decode_image(&mut self) -> IoResult<Vec<u8>> {
 		if !self.have_header {
 			let _ = try!(self.read_header());
 			let _ = try!(self.read_logical_screen_descriptor());
@@ -268,7 +265,7 @@ impl<R: Reader> GIFDecoder<R> {
 			}
 		}
 
-		Ok(~[])
+		Ok(Vec::new())
 	}
 }
 
@@ -289,7 +286,7 @@ fn expand_image(palete: &[(u8, u8, u8)],
 				continue
 			}
 
-			let (r, g, b) = palete[index];
+			let (r, g, b) = palete[index as uint];
 
 			image[(y0 + y) * stride + x0 * 3 + x * 3 + 0] = r;
 			image[(y0 + y) * stride + x0 * 3 + x * 3 + 1] = g;
