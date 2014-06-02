@@ -1,31 +1,17 @@
-extern crate collections;
 extern crate time;
-extern crate flate;
+extern crate image;
 
 use std::os;
 use std::io::File;
 use std::io::MemReader;
 
-use jpeg::JPEGDecoder;
-use jpeg::JPEGEncoder;
-use png::PNGDecoder;
-use png::PNGEncoder;
-use gif::GIFDecoder;
-use ppm::PPMEncoder;
-use webp::WebpDecoder;
-
-mod colortype;
-mod hash;
-mod deflate;
-mod zlib;
-mod lzw;
-mod transform;
-mod jpeg;
-mod png;
-mod gif;
-mod ppm;
-mod vp8;
-mod webp;
+use image::JPEGDecoder;
+use image::JPEGEncoder;
+use image::PNGDecoder;
+use image::PNGEncoder;
+use image::GIFDecoder;
+use image::PPMEncoder;
+use image::WebpDecoder;
 
 fn main() {
 	let file = if os::args().len() == 2 {
