@@ -7,7 +7,6 @@ Learning Rust; Implementing image formats
 + Decoding interlaced jpeg and png and gif
 + ~~Decoding webp images~~(luma only)
 + Some sort of error handling instead of task failure
-+ Update to master at some point
 
 ###BUGS
 + Paletted images < 8 bits per pixel not handled properly
