@@ -19,7 +19,7 @@ mod hash;
 mod deflate;
 mod zlib;
 mod lzw;
-mod dct;
+mod transform;
 mod jpeg;
 mod png;
 mod gif;

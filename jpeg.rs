@@ -6,9 +6,9 @@ use std::iter::range_step;
 use std::default::Default;
 
 use collections::smallintmap::SmallIntMap;
-use colortype;
 
-use dct::fast;
+use colortype;
+use transform;
 
 //Markers
 //Baseline DCT
@@ -279,7 +279,7 @@ impl<R: Reader>JPEGDecoder<R> {
 			}
 		}
 
-		fast::idct(tmp, zz);
+		transform::idct(tmp, zz);
 
 		Ok(dc)
 	}
@@ -1066,7 +1066,7 @@ impl<W: Writer> JPEGEncoder<W> {
 
 				//Level shift and fdct
 				//Coeffs are scaled by 8
-				fast::fdct(yblock.as_slice(), dct_yblock);
+				transform::fdct(yblock.as_slice(), dct_yblock);
 
 				//Quantization
 				for i in range(0u, 64) {
@@ -1103,9 +1103,9 @@ impl<W: Writer> JPEGEncoder<W> {
 
 				//Level shift and fdct
 				//Coeffs are scaled by 8
-				fast::fdct(yblock.as_slice(), dct_yblock);
-				fast::fdct(cb_block.as_slice(), dct_cb_block);
-				fast::fdct(cr_block.as_slice(), dct_cr_block);
+				transform::fdct(yblock.as_slice(), dct_yblock);
+				transform::fdct(cb_block.as_slice(), dct_cb_block);
+				transform::fdct(cr_block.as_slice(), dct_cr_block);
 
 				//Quantization
 				for i in range(0u, 64) {

@@ -1,6 +1,8 @@
 use std::io::IoResult;
 use std::default::Default;
 
+use transform;
+
 static MAX_SEGMENTS: u8 = 4;
 static NUM_DCT_TOKENS: u8 = 12;
 
@@ -1274,7 +1276,7 @@ impl<R: Reader> VP8Decoder<R> {
                         self.left.complexity[0] = if n { 1 } else { 0 };
                         self.top.as_mut_slice()[mbx].complexity[0] = if n { 1 } else { 0 };
 
-                        iwht4x4(block);
+                        transform::iwht4x4(block);
 
                         for k in range(0u, 16) {
                                 blocks[16 * k] = block[k];
@@ -1296,7 +1298,7 @@ impl<R: Reader> VP8Decoder<R> {
                                 let n = self.read_coefficients(block, p, plane, complexity as uint, dcq, acq);
 
                                 if block[0] != 0 || n {
-                                        idct4x4(block);
+                                        transform::idct4x4(block);
                                 }
 
                                 left = if n { 1 } else { 0 };
@@ -1322,7 +1324,7 @@ impl<R: Reader> VP8Decoder<R> {
 
                                         let n = self.read_coefficients(block, p, plane, complexity as uint, dcq, acq);
                                         if block[0] != 0 || n {
-                                                idct4x4(block);
+                                                transform::idct4x4(block);
                                         }
 
                                         left = if n { 1 } else { 0 };
@@ -1787,77 +1789,4 @@ fn predict_bhupred(a: &mut [u8], x0: uint, y0: uint, stride: uint) {
         a[(y0 + 3) * stride + x0 + 1] = l3;
         a[(y0 + 3) * stride + x0 + 2] = l3;
         a[(y0 + 3) * stride + x0 + 3] = l3;
-}
-
-//14.3
-fn iwht4x4(block: &mut [i32]) {
-        for i in range(0u, 4) {
-                let a1 = block[0 + i] as i32 + block[12 + i] as i32;
-                let b1 = block[4 + i] as i32 + block[8  + i] as i32;
-                let c1 = block[4 + i] as i32 - block[8  + i] as i32;
-                let d1 = block[0 + i] as i32 - block[12 + i] as i32;
-
-                block[0  + i] = a1 + b1;
-                block[4  + i] = c1 + d1;
-                block[8  + i] = a1 - b1;
-                block[12 + i] = d1 - c1;
-        }
-
-        for i in range(0u, 4) {
-                let a1 = block[4 * i + 0] + block[4 * i + 3];
-                let b1 = block[4 * i + 1] + block[4 * i + 2];
-                let c1 = block[4 * i + 1] - block[4 * i + 2];
-                let d1 = block[4 * i + 0] - block[4 * i + 3];
-
-                let a2 = a1 + b1;
-                let b2 = c1 + d1;
-                let c2 = a1 - b1;
-                let d2 = d1 - c1;
-
-                block[4 * i + 0] = (a2 + 3) >> 3;
-                block[4 * i + 1] = (b2 + 3) >> 3;
-                block[4 * i + 2] = (c2 + 3) >> 3;
-                block[4 * i + 3] = (d2 + 3) >> 3;
-        }
-}
-
-static CONST1: i32 = 20091;
-static CONST2: i32 = 35468;
-
-fn idct4x4(block: &mut [i32]) {
-        for i in range(0u, 4) {
-                let a1 = block[0 + i] as i32 + block[8 + i] as i32;
-                let b1 = block[0 + i] as i32 - block[8 + i] as i32;
-
-                let t1 = (block[4 + i] as i32 * CONST2) >> 16;
-                let t2 = block[12 + i] as i32 + ((block[12 + i] as i32 * CONST1) >> 16);
-                let c1 = t1 - t2;
-
-                let t1 = block[4 + i] as i32 + ((block[4 + i] as i32 * CONST1) >> 16);
-                let t2 = (block[12 + i] as i32 * CONST2) >> 16;
-                let d1 = t1 + t2;
-
-                block[4 * 0 + i] = a1 + d1;
-                block[4 * 3 + i] = a1 - d1;
-                block[4 * 1 + i] = b1 + c1;
-                block[4 * 2 + i] = b1 - c1;
-        }
-
-        for i in range(0u, 4) {
-                let a1 = block[4 * i + 0] as i32 + block[4 * i + 2] as i32;
-                let b1 = block[4 * i + 0] as i32 - block[4 * i + 2] as i32;
-
-                let t1 = (block[4 * i + 1] as i32 * CONST2) >> 16;
-                let t2 = block[4 * i + 3] as i32 + ((block[4 * i + 3] as i32 * CONST1) >> 16);
-                let c1 = t1 - t2;
-
-                let t1 = block[4 * i + 1] as i32 + ((block[4 * i + 1] as i32 * CONST1) >> 16);
-                let t2 = (block[4 * i + 3] as i32 * CONST2) >> 16;
-                let d1 = t1 + t2;
-
-                block[4 * i + 0] = (a1 + d1 + 4) >> 3;
-                block[4 * i + 3] = (a1 - d1 + 4) >> 3;
-                block[4 * i + 1] = (b1 + c1 + 4) >> 3;
-                block[4 * i + 2] = (b1 - c1 + 4) >> 3;
-        }
 }
