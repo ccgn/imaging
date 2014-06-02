@@ -1054,7 +1054,7 @@ impl<W: Writer> JPEGEncoder<W> {
 		Ok(dcval)
 	}
 
-	fn encode_Grey(&mut self, image: &[u8], width: uint, height: uint, bpp: uint) -> IoResult<()> {
+	fn encode_grey(&mut self, image: &[u8], width: uint, height: uint, bpp: uint) -> IoResult<()> {
 		let mut yblock     = [0u8, ..64];
 		let mut y_dcprev   = 0;
 		let mut dct_yblock = [0i32, ..64];
@@ -1062,7 +1062,7 @@ impl<W: Writer> JPEGEncoder<W> {
 		for y in range_step(0, height as uint, 8) {
 			for x in range_step(0, width as uint, 8) {
 				//RGB -> YCbCr
-				copy_blocks_Grey(image, x, y, width as uint, bpp, &mut yblock);
+				copy_blocks_grey(image, x, y, width as uint, bpp, &mut yblock);
 
 				//Level shift and fdct
 				//Coeffs are scaled by 8
@@ -1083,7 +1083,7 @@ impl<W: Writer> JPEGEncoder<W> {
 		Ok(())
 	}
 
-	fn encode_RGB(&mut self, image: &[u8], width: uint, height: uint, bpp: uint) -> IoResult<()> {
+	fn encode_rgb(&mut self, image: &[u8], width: uint, height: uint, bpp: uint) -> IoResult<()> {
 		let mut y_dcprev = 0;
 		let mut cb_dcprev = 0;
 		let mut cr_dcprev = 0;
@@ -1099,7 +1099,7 @@ impl<W: Writer> JPEGEncoder<W> {
 		for y in range_step(0, height as uint, 8) {
 			for x in range_step(0, width as uint, 8) {
 				//RGB -> YCbCr
-				copy_blocks_YCbCr(image, x, y, width as uint, bpp, &mut yblock, &mut cb_block, &mut cr_block);
+				copy_blocks_ycbcr(image, x, y, width as uint, bpp, &mut yblock, &mut cb_block, &mut cr_block);
 
 				//Level shift and fdct
 				//Coeffs are scaled by 8
@@ -1182,10 +1182,10 @@ impl<W: Writer> JPEGEncoder<W> {
 		let _   = try!(self.write_segment(SOS, Some(buf)));
 
 		match c {
-			colortype::RGB(8)   => try!(self.encode_RGB(image, width as uint, height as uint, 3)),
-			colortype::RGBA(8)  => try!(self.encode_RGB(image, width as uint, height as uint, 4)),
-			colortype::Grey(8)  => try!(self.encode_Grey(image, width as uint, height as uint, 1)),
-			colortype::GreyA(8) => try!(self.encode_Grey(image, width as uint, height as uint, 2)),
+			colortype::RGB(8)   => try!(self.encode_rgb(image, width as uint, height as uint, 3)),
+			colortype::RGBA(8)  => try!(self.encode_rgb(image, width as uint, height as uint, 4)),
+			colortype::Grey(8)  => try!(self.encode_grey(image, width as uint, height as uint, 1)),
+			colortype::GreyA(8) => try!(self.encode_grey(image, width as uint, height as uint, 2)),
 			_  => fail!("unimplemented!")
 		};
 
@@ -1332,7 +1332,7 @@ fn value_at(s: &[u8], index: uint) -> u8 {
 	}
 }
 
-fn copy_blocks_YCbCr(source: &[u8],
+fn copy_blocks_ycbcr(source: &[u8],
 		     x0: uint,
 		     y0: uint,
 		     width: uint,
@@ -1358,7 +1358,7 @@ fn copy_blocks_YCbCr(source: &[u8],
 	}
 }
 
-fn copy_blocks_Grey(source: &[u8],
+fn copy_blocks_grey(source: &[u8],
 		    x0: uint,
 		    y0: uint,
 		    width: uint,

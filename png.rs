@@ -150,7 +150,7 @@ impl<R: Reader> PNGDecoder<R> {
 		Ok(png.as_slice() == PNGSIGNATURE)
 	}
 
-	fn parse_IHDR(&mut self, buf: Vec<u8>) -> Result<(), PNGError> {
+	fn parse_ihdr(&mut self, buf: Vec<u8>) -> Result<(), PNGError> {
 		self.crc.update(buf.as_slice());
 		let mut m = MemReader::new(buf);
 
@@ -212,7 +212,7 @@ impl<R: Reader> PNGDecoder<R> {
 		Ok(())
 	}
 
-	fn parse_PLTE(&mut self, buf: Vec<u8>) -> Result<(), PNGError> {
+	fn parse_plte(&mut self, buf: Vec<u8>) -> Result<(), PNGError> {
 		self.crc.update(buf.as_slice());
 
 		let len = buf.len() / 3;
@@ -270,13 +270,13 @@ impl<R: Reader> PNGDecoder<R> {
 					assert!(length == 13);
 					let d = try!(self.z.inner().r.read_exact(length as uint));
 
-					let _ = self.parse_IHDR(d);
+					let _ = self.parse_ihdr(d);
 					self.state = HaveIHDR;
 				}
 
 				("PLTE", HaveIHDR) => {
 					let d = try!(self.z.inner().r.read_exact(length as uint));
-					let _ = self.parse_PLTE(d);
+					let _ = self.parse_plte(d);
 					self.state = HavePLTE;
 				}
 
@@ -482,10 +482,10 @@ impl<W: Writer> PNGEncoder<W> {
 
 		let _ = try!(self.write_signature());
 
-		let (bytes, bpp) = build_IHDR(width, height, c);
+		let (bytes, bpp) = build_ihdr(width, height, c);
 		let _ = try!(self.write_chunk("IHDR", bytes.as_slice()));
 
-		let compressed_bytes = build_IDAT(image, bpp, width, height);
+		let compressed_bytes = build_idat(image, bpp, width, height);
 
 		for chunk in compressed_bytes.as_slice().chunks(1024 * 256) {
 			let _ = try!(self.write_chunk("IDAT", chunk));
@@ -515,7 +515,7 @@ impl<W: Writer> PNGEncoder<W> {
 	}
 }
 
-fn build_IHDR(width: u32, height: u32, c: colortype::ColorType) -> (Vec<u8>, uint) {
+fn build_ihdr(width: u32, height: u32, c: colortype::ColorType) -> (Vec<u8>, uint) {
 	let mut m = MemWriter::with_capacity(13);
 
 	let _ = m.write_be_u32(width);
@@ -621,7 +621,7 @@ fn select_filter(rowlength: uint, bpp: uint, previous: &[u8], current_s: &mut [u
 	method
 }
 
-fn build_IDAT(image: &[u8], bpp: uint, width: u32, height: u32) -> Vec<u8> {
+fn build_idat(image: &[u8], bpp: uint, width: u32, height: u32) -> Vec<u8> {
 	use flate::deflate_bytes_zlib;
 
 	let rowlen = bpp * width as uint;

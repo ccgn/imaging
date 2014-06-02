@@ -1,6 +1,5 @@
 use std::io;
 use std::cmp;
-use std::slice;
 use std::io::IoResult;
 
 static LITERALLENGTHCODES: u16 = 286;
