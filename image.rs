@@ -151,6 +151,31 @@ impl PixelBuf {
 			}
 		}
 	}
+
+	pub fn invert(&mut self) {
+		match *self {
+			Luma8(ref mut p)  => {
+				for i in p.mut_iter() {
+					i.invert();
+				}
+			}
+			LumaA8(ref mut p) => {
+				for i in p.mut_iter() {
+					i.invert();
+				}
+			}
+			RGB8(ref mut p)   =>  {
+				for i in p.mut_iter() {
+					i.invert();
+				}
+			}
+			RGBA8(ref mut p)  =>  {
+				for i in p.mut_iter() {
+					i.invert();
+				}
+			}
+		}
+	}
 }
 
 /// A Generic representation of an image
@@ -272,6 +297,10 @@ impl Image {
 			height: self.height,
 			color:  colortype::Grey(8),
 		}
+	}
+
+	pub fn invert(&mut self) {
+		self.pixels.invert();
 	}
 }
 

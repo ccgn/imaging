@@ -103,6 +103,7 @@ pub trait ConvertColor<T> {
 	fn to_rgba(&self) -> RGBA<T>;
 	fn to_luma(&self) -> Luma<T>;
 	fn to_luma_alpha(&self) -> LumaA<T>;
+	fn invert(&mut self);
 }
 
 impl<T: Primitive + NumCast + Clone + Bounded> ConvertColor<T> for RGB<T> {
@@ -131,6 +132,18 @@ impl<T: Primitive + NumCast + Clone + Bounded> ConvertColor<T> for RGB<T> {
 
 		RGBA(r, g, b, Bounded::max_value())
 	}
+
+	fn invert(&mut self) {
+		let (r, g, b) = self.channels();
+
+		let max: T = Bounded::max_value();
+
+		let r1 = max - r;
+		let g1 = max - g;
+		let b1 = max - b;
+
+		*self = RGB(r1, g1, b1)
+	}
 }
 
 impl<T: Primitive + NumCast + Clone + Bounded> ConvertColor<T> for RGBA<T> {
@@ -153,6 +166,15 @@ impl<T: Primitive + NumCast + Clone + Bounded> ConvertColor<T> for RGBA<T> {
 
 	fn to_rgba(&self) -> RGBA<T> {
 		self.clone()
+	}
+
+	fn invert(&mut self) {
+		let (r, g, b) = self.to_rgb().channels();
+		let a = self.alpha();
+
+		let max: T = Bounded::max_value();
+
+		*self = RGBA(max - r, max - g, max - b, a)
 	}
 }
 
@@ -180,6 +202,13 @@ impl<T: Primitive + NumCast + Clone + Bounded> ConvertColor<T> for Luma<T> {
 
 		RGBA(r, g, b, Bounded::max_value())
 	}
+
+	fn invert(&mut self) {
+		let max: T = Bounded::max_value();
+		let l1 = max - self.channel();
+
+		*self = Luma(l1)
+	}
 }
 
 impl<T: Primitive + NumCast + Clone + Bounded> ConvertColor<T> for LumaA<T> {
@@ -205,6 +234,15 @@ impl<T: Primitive + NumCast + Clone + Bounded> ConvertColor<T> for LumaA<T> {
 		let a = self.alpha();
 
 		RGBA(r, g, b, a)
+	}
+
+	fn invert(&mut self) {
+		let l = self.to_luma().channel();
+		let a  = self.alpha();
+
+		let max: T = Bounded::max_value();
+
+		*self = LumaA(max - l, a)
 	}
 }
 

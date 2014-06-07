@@ -40,6 +40,8 @@ fn main() {
 	let t = im.clone();
 	spawn(proc() {
 		let fout = File::create(&Path::new(format!("{}.jpg", os::args().as_slice()[1]))).unwrap();
+		let mut t = t;
+		t.invert();
 
 		let now = time::precise_time_ns();
 		let _ = t.save(fout, JPEG);
