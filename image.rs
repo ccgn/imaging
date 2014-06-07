@@ -1,9 +1,12 @@
 use std::io;
 use std::slice;
+use std::slice::Items;
+
+use std::num::Bounded;
 
 use colortype;
 use colortype::ColorType;
-use colortype::ColorConvert;
+use colortype::ConvertColor;
 use colortype::{
 	RGB,
 	RGBA,
@@ -115,24 +118,44 @@ pub trait ImageDecoder {
         }
 }
 
+#[deriving(Clone, Show, PartialEq)]
 enum PixelBuf {
-	Luma8(Vec<Luma<u8>>),
-	Luma16(Vec<Luma<u16>>),
+	//Luma8(Vec<Luma<u8>>),
+	//Luma16(Vec<Luma<u16>>),
 
-	LumaA8(Vec<LumaA<u8>>),
-	LumaA16(Vec<LumaA<u16>),
+	//LumaA8(Vec<LumaA<u8>>),
+	//LumaA16(Vec<LumaA<u16>>),
 
 	RGB8(Vec<RGB<u8>>),
-	RGB16(Vec<RGB<u16>>),
+	//RGB16(Vec<RGB<u16>>),
 
-	RGBA8(Vec<RGBA<u8>>),
-	RGBA16(Vec<RGBA<u16>>),
+	//RGBA8(Vec<RGBA<u8>>),
+	//RGBA16(Vec<RGBA<u16>>),
+}
+
+impl<A: Primitive + NumCast + Clone + Bounded, T: ConvertColor<A>> PixelBuf {
+	pub fn iter<'a>(&'a self) -> Items<'a, T> {
+		match *self {
+			//Luma8(ref a)   => a.as_slice().iter(),
+			//Luma16(ref a)  => a.as_slice().iter(),
+
+			//LumaA8(ref a)  => a.as_slice().iter(),
+			//LumaA16(ref a) => a.as_slice().iter(),
+
+			RGB8(ref a)    => a.as_slice().iter(),
+			//RGB16(ref a)   => a.as_slice().iter(),
+
+			//RGBA8(ref a)   => a.as_slice().iter(),
+			//RGBA16(ref a)  => a.as_slice().iter(),
+			_ => fail!("unimplemented")
+		}
+	}
 }
 
 /// A Generic representation of an image
 #[deriving(Clone)]
 pub struct Image {
-	pixels:  Vec<u8>,
+	pixels:  PixelBuf,
 	width:   u32,
 	height:  u32,
 	color:   ColorType,
@@ -162,7 +185,7 @@ impl Image {
 		let r = match format {
 			PNG  => {
 				let mut p = png::PNGEncoder::new(w);
-				try!(p.encode(self.pixels.as_slice(),
+				try!(p.encode(self.raw_pixels().as_slice(),
 					      self.width,
 					      self.height,
 					      self.color))
@@ -170,7 +193,7 @@ impl Image {
 			}
 			PPM  => {
 				let mut p = ppm::PPMEncoder::new(w);
-				try!(p.encode(self.pixels.as_slice(),
+				try!(p.encode(self.raw_pixels().as_slice(),
 					      self.width,
 					      self.height,
 					      self.color))
@@ -178,7 +201,7 @@ impl Image {
 			}
 			JPEG => {
 				let mut j = jpeg::JPEGEncoder::new(w);
-				try!(j.encode(self.pixels.as_slice(),
+				try!(j.encode(self.raw_pixels().as_slice(),
 					      self.width,
 					      self.height,
 					      self.color))
@@ -192,8 +215,37 @@ impl Image {
 
 	/// Return a reference to the pixel buffer of this image.
 	/// Its interpretation is dependent on the image's ```ColorType```.
-	pub fn raw_pixels<'a>(&'a self) -> &'a [u8] {
-		self.pixels.as_slice()
+	pub fn raw_pixels(&self) -> Vec<u8> {
+		let mut r = Vec::new();
+
+		match self.pixels {
+			//Luma8(ref a) => {
+			//	for &i in a.iter() {
+			//		r.push(i.channel());
+			//	}
+			//}
+			RGB8(ref a)  => {
+				for &i in a.iter() {
+					let (red, g, b) = i.channels();
+					r.push(red);
+					r.push(g);
+					r.push(b);
+				}
+			}
+			//RGBA8(ref a) => {
+			//	for &i in a.iter() {
+			//		let (red, g, b, alpha) = i.channels();
+			//		r.push(red);
+			//		r.push(g);
+			//		r.push(b);
+			//		r.push(alpha);
+			//	}
+			//}
+
+			_  => fail!("unimplemented")
+		}
+
+		r
 	}
 
 	/// Returns a tuple of the image's width and height.
@@ -205,14 +257,56 @@ impl Image {
 	pub fn colortype(&self) -> ColorType {
 		self.color
 	}
+
+	pub fn grayscale(&self) -> Image {
+		let pixels = self.pixels
+				 .iter()
+				 .map(|p| Luma(p.to_luma().channel() as u8))
+				 .collect();
+
+		Image {
+			pixels: Luma8(pixels),
+			width:  self.width,
+			height: self.height,
+			color:  colortype::Grey(8),
+		}
+	}
 }
 
 fn decoder_to_image<I: ImageDecoder>(codec: I) -> ImageResult<Image> {
 	let mut codec = codec;
 
-	let pixels = try!(codec.read_image());
 	let color  = try!(codec.colortype());
+	let buf    = try!(codec.read_image());
 	let (w, h) = try!(codec.dimensions());
+
+	let pixels = match color {
+		colortype::Rgb(8) => {
+			let p = buf.as_slice()
+				   .chunks(3)
+				   .map(|a| RGB::<u8>(a[0], a[1], a[2]))
+				   .collect();
+			RGB8(p)
+		}
+
+		/*colortype::Rgba(8) => {
+			let p = buf.as_slice()
+				   .chunks(4)
+				   .map(|a| RGBA::<u8>(a[0], a[1], a[2], a[3]))
+				   .collect();
+
+			RGBA8(p)
+		}
+
+		colortype::Grey(8) => {
+			let p = buf.as_slice()
+				   .map(|a| Luma::<u8>(a))
+				   .collect();
+			Luma8(p)
+		}*/
+
+		_ => return Err(UnsupportedColor)
+	};
 
 	let im = Image {
 		pixels:  pixels,

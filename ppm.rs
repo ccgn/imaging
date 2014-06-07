@@ -5,7 +5,7 @@ use std::num;
 use std::num::ToStrRadix;
 
 use colortype;
-use colortype::{Grey, Palette, GreyA, RGB, RGBA};
+use colortype::{Grey, Palette, GreyA, Rgb, Rgba};
 
 pub struct PPMEncoder<W> {
 	w: W
@@ -45,9 +45,9 @@ impl<W: Writer> PPMEncoder<W> {
 					let _ = try!(self.w.write_u8(buf[i]));
 				}
 			}
-			RGB(8)  => try!(self.w.write(buf)),
-			RGB(16) => try!(self.w.write(buf)),
-			RGBA(8) => {
+			Rgb(8)  => try!(self.w.write(buf)),
+			Rgb(16) => try!(self.w.write(buf)),
+			Rgba(8) => {
 				for x in buf.chunks(4) {
 					let _ = try!(self.w.write_u8(x[0]));
 					let _ = try!(self.w.write_u8(x[1]));
@@ -65,10 +65,10 @@ impl<W: Writer> PPMEncoder<W> {
 fn max_pixel_value(pixel_type: colortype::ColorType) -> u16 {
 	let max = match pixel_type {
 		Grey(n)    => num::pow(2, n as uint) - 1,
-		RGB(n)     => num::pow(2, n as uint) - 1,
+		Rgb(n)     => num::pow(2, n as uint) - 1,
 		Palette(n) => num::pow(2, n as uint) - 1,
 		GreyA(n)   => num::pow(2, n as uint) - 1,
-		RGBA(n)    => num::pow(2, n as uint) - 1
+		Rgba(n)    => num::pow(2, n as uint) - 1
 	};
 
 	max as u16

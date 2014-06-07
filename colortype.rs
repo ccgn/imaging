@@ -1,4 +1,5 @@
 //! Types and methods for representing and manipulating colors
+use std::num::Bounded;
 
 ///An enumeration over supported color types and their bit depths
 #[deriving(PartialEq, Show, Clone)]
@@ -7,7 +8,7 @@ pub enum ColorType {
 	Grey(u8),
 
 	///Pixel contains R, G and B channels
-	RGB(u8),
+	Rgb(u8),
 
 	///Pixel is an index into a color palette
 	Palette(u8),
@@ -16,17 +17,17 @@ pub enum ColorType {
 	GreyA(u8),
 
 	///Pixel is RGB with an alpha channel
-	RGBA(u8)
+	Rgba(u8)
 }
 
 ///Returns the number of bits contained in a pixel of ColorType c
 pub fn bits_per_pixel(c: ColorType) -> uint {
 	match c {
 		Grey(n)    => n as uint,
-		RGB(n)     => 3 * n as uint,
+		Rgb(n)     => 3 * n as uint,
 		Palette(n) => 3 * n as uint,
 		GreyA(n)   => 2 * n as uint,
-		RGBA(n)    => 4 * n as uint,
+		Rgba(n)    => 4 * n as uint,
 	}
 }
 
@@ -34,10 +35,10 @@ pub fn bits_per_pixel(c: ColorType) -> uint {
 pub fn num_components(c: ColorType) -> uint {
 	match c {
 		Grey(_)    => 1,
-		RGB(_)     => 3,
+		Rgb(_)     => 3,
 		Palette(_) => 3,
 		GreyA(_)   => 2,
-		RGBA(_)    => 4,
+		Rgba(_)    => 4,
 	}
 }
 
@@ -67,12 +68,6 @@ impl<T: Primitive + NumCast + Clone + Bounded> LumaA<T> {
 			LumaA(_, a) => a
 		}
 	}
-
-	pub fn setalpha(&mut self, alpha: T) {
-		match *self {
-			LumaA(_, ref mut a) => a = T
-		}
-	}
 }
 
 #[deriving(PartialEq, Clone, Show)]
@@ -87,7 +82,7 @@ impl<T: Primitive + NumCast + Clone + Bounded> RGB<T> {
 }
 
 #[deriving(PartialEq, Clone, Show)]
-pub struct RGBA<T>(T, T, T);
+pub struct RGBA<T>(T, T, T, T);
 
 impl<T: Primitive + NumCast + Clone + Bounded> RGBA<T> {
 	pub fn channels(&self) -> (T, T, T, T) {
@@ -101,12 +96,6 @@ impl<T: Primitive + NumCast + Clone + Bounded> RGBA<T> {
 			RGBA(_, _, _, a) => a
 		}
 	}
-
-	pub fn setalpha(&mut self, alpha: T) {
-		match *self {
-			RGBA(_, _, _, ref mut a) => a = T
-		}
-	}
 }
 
 pub trait ConvertColor<T> {
@@ -116,7 +105,7 @@ pub trait ConvertColor<T> {
 	fn to_luma_alpha(&self) -> LumaA<T>;
 }
 
-impl<T: Primitive + NumCast + Clone + Bounded> ConvertColor for RGB<T> {
+impl<T: Primitive + NumCast + Clone + Bounded> ConvertColor<T> for RGB<T> {
 	fn to_luma(&self) -> Luma<T> {
 		let (r, g, b) = self.channels();
 
@@ -128,9 +117,9 @@ impl<T: Primitive + NumCast + Clone + Bounded> ConvertColor for RGB<T> {
 	}
 
 	fn to_luma_alpha(&self) -> LumaA<T> {
-		let l = self.to_luma().channels();
+		let l = self.to_luma().channel();
 
-		LumaA(l, l.max_value())
+		LumaA(l, Bounded::max_value())
 	}
 
 	fn to_rgb(&self) -> RGB<T> {
@@ -140,17 +129,17 @@ impl<T: Primitive + NumCast + Clone + Bounded> ConvertColor for RGB<T> {
 	fn to_rgba(&self) -> RGBA<T> {
 		let (r, g, b) = self.channels();
 
-		RGBA(r, g, b, r.max_value())
+		RGBA(r, g, b, Bounded::max_value())
 	}
 }
 
-impl<T: Primitive + NumCast + Clone + Bounded> ConvertColor for RGBA<T> {
+impl<T: Primitive + NumCast + Clone + Bounded> ConvertColor<T> for RGBA<T> {
 	fn to_luma(&self) -> Luma<T> {
 		self.to_rgb().to_luma()
 	}
 
 	fn to_luma_alpha(&self) -> LumaA<T> {
-		let l = self.to_luma();
+		let l = self.to_luma().channel();
 		let a = self.alpha();
 
 		LumaA(l, a)
@@ -167,15 +156,15 @@ impl<T: Primitive + NumCast + Clone + Bounded> ConvertColor for RGBA<T> {
 	}
 }
 
-impl<T: Primitive + NumCast + Clone + Bounded> ConvertColor for Luma<T> {
+impl<T: Primitive + NumCast + Clone + Bounded> ConvertColor<T> for Luma<T> {
 	fn to_luma(&self) -> Luma<T> {
 		self.clone()
 	}
 
 	fn to_luma_alpha(&self) -> LumaA<T> {
-		let l = self.channel()
+		let l = self.channel();
 
-		LumaA(l, l.max_value())
+		LumaA(l, Bounded::max_value())
 	}
 
 	fn to_rgb(&self) -> RGB<T> {
@@ -189,13 +178,14 @@ impl<T: Primitive + NumCast + Clone + Bounded> ConvertColor for Luma<T> {
 	fn to_rgba(&self) -> RGBA<T> {
 		let (r, g, b) = self.to_rgb().channels();
 
-		RGBA(r, g, b, self.channel().max_value())
+		RGBA(r, g, b, Bounded::max_value())
 	}
 }
 
-impl<T: Primitive + NumCast + Clone + Bounded> ConvertColor for LumaA<T> {
+impl<T: Primitive + NumCast + Clone + Bounded> ConvertColor<T> for LumaA<T> {
 	fn to_luma(&self) -> Luma<T> {
-		self.clone()
+		let (l, _) = self.channels();
+		Luma(l)
 	}
 
 	fn to_luma_alpha(&self) -> LumaA<T> {

@@ -530,7 +530,7 @@ impl<R: Reader> ImageDecoder for JPEGDecoder<R> {
 		let ctype = if self.num_components == 1 {
 			colortype::Grey(8)
 		} else {
-			colortype::RGB(8)
+			colortype::Rgb(8)
 		};
 
 		Ok(ctype)
