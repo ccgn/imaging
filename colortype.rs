@@ -43,7 +43,7 @@ pub fn num_components(c: ColorType) -> uint {
 }
 
 #[deriving(PartialEq, Clone, Show)]
-pub struct Luma<T>(T);
+pub struct Luma<T>(pub T);
 
 impl<T: Primitive + NumCast + Clone + Bounded> Luma<T> {
 	pub fn channel(&self) -> T {
@@ -54,7 +54,7 @@ impl<T: Primitive + NumCast + Clone + Bounded> Luma<T> {
 }
 
 #[deriving(PartialEq, Clone, Show)]
-pub struct LumaA<T>(T, T);
+pub struct LumaA<T>(pub T, pub T);
 
 impl<T: Primitive + NumCast + Clone + Bounded> LumaA<T> {
 	pub fn channels(&self) -> (T, T) {
@@ -71,7 +71,7 @@ impl<T: Primitive + NumCast + Clone + Bounded> LumaA<T> {
 }
 
 #[deriving(PartialEq, Clone, Show)]
-pub struct RGB<T>(T, T, T);
+pub struct RGB<T>(pub T, pub T, pub T);
 
 impl<T: Primitive + NumCast + Clone + Bounded> RGB<T> {
 	pub fn channels(&self) -> (T, T, T) {
@@ -82,7 +82,7 @@ impl<T: Primitive + NumCast + Clone + Bounded> RGB<T> {
 }
 
 #[deriving(PartialEq, Clone, Show)]
-pub struct RGBA<T>(T, T, T, T);
+pub struct RGBA<T>(pub T, pub T, pub T, pub T);
 
 impl<T: Primitive + NumCast + Clone + Bounded> RGBA<T> {
 	pub fn channels(&self) -> (T, T, T, T) {
