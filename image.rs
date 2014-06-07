@@ -222,6 +222,7 @@ impl Image {
 	pub fn raw_pixels(&self) -> Vec<u8> {
 		let mut r = Vec::new();
 
+		//TODO: Consider using mem::transmute
 		match self.pixels {
 			Luma8(ref a) => {
 				for &i in a.iter() {
