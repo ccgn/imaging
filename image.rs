@@ -3,6 +3,13 @@ use std::slice;
 
 use colortype;
 use colortype::ColorType;
+use colortype::ColorConvert;
+use colortype::{
+	RGB,
+	RGBA,
+	Luma,
+	LumaA
+};
 
 use png;
 use ppm;
@@ -108,6 +115,19 @@ pub trait ImageDecoder {
         }
 }
 
+enum PixelBuf {
+	Luma8(Vec<Luma<u8>>),
+	Luma16(Vec<Luma<u16>>),
+
+	LumaA8(Vec<LumaA<u8>>),
+	LumaA16(Vec<LumaA<u16>),
+
+	RGB8(Vec<RGB<u8>>),
+	RGB16(Vec<RGB<u16>>),
+
+	RGBA8(Vec<RGBA<u8>>),
+	RGBA16(Vec<RGBA<u16>>),
+}
 
 /// A Generic representation of an image
 #[deriving(Clone)]
@@ -202,4 +222,14 @@ fn decoder_to_image<I: ImageDecoder>(codec: I) -> ImageResult<Image> {
 	};
 
 	Ok(im)
+}
+
+fn clamp<N: Num + Ord>(n: N, min: N, max: N) -> N {
+	if n < min {
+		min
+	} else if n > max {
+		max
+	} else {
+		n
+	}
 }
