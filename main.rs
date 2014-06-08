@@ -37,9 +37,19 @@ fn main() {
 	println!("{} bytes", im.raw_pixels().len());
 	println!("decoded in {} ms", (after - now) / (1000 * 1000));
 
+	let mut im = im;
+
+	let now = time::precise_time_ns();
+	im.invert();
+	let after = time::precise_time_ns();
+
+	println!("inverted in {} ms", (after - now) / (1000 * 1000));
+
+
 	let t = im.clone();
 	spawn(proc() {
 		let fout = File::create(&Path::new(format!("{}.jpg", os::args().as_slice()[1]))).unwrap();
+
 
 		let now = time::precise_time_ns();
 		let _ = t.save(fout, JPEG);
@@ -63,7 +73,7 @@ fn main() {
 		let fout = File::create(&Path::new(format!("{}.png", os::args().as_slice()[1]))).unwrap();
 
 		let now = time::precise_time_ns();
-		let _ = im.save(fout, PNG);
+		let _ = im.grayscale().save(fout, PNG);
 		let after = time::precise_time_ns();
 
 		println!("encoded png in {} ms", (after - now) / (1000 * 1000));
