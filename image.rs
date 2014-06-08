@@ -1,15 +1,9 @@
 use std::io;
 use std::slice;
 
+use pixels;
 use colortype;
 use colortype::ColorType;
-use colortype::ConvertColor;
-use colortype::{
-	RGB,
-	RGBA,
-	Luma,
-	LumaA
-};
 
 use png;
 use ppm;
@@ -115,76 +109,10 @@ pub trait ImageDecoder {
         }
 }
 
-#[deriving(Clone, Show, PartialEq)]
-enum PixelBuf {
-	Luma8(Vec<Luma<u8>>),
-	//Luma16(Vec<Luma<u16>>),
-
-	LumaA8(Vec<LumaA<u8>>),
-	//LumaA16(Vec<LumaA<u16>>),
-
-	RGB8(Vec<RGB<u8>>),
-	//RGB16(Vec<RGB<u16>>),
-
-	RGBA8(Vec<RGBA<u8>>),
-	//RGBA16(Vec<RGBA<u16>>),
-}
-
-impl PixelBuf {
-	pub fn grayscale(&self) -> PixelBuf {
-		match *self {
-			Luma8(_)      => self.clone(),
-
-			LumaA8(ref p) => {
-				let n = p.iter().map(|i| i.to_luma()).collect();
-				Luma8(n)
-			}
-
-			RGB8(ref p)   => {
-				let n = p.iter().map(|i| i.to_luma()).collect();
-				Luma8(n)
-			}
-
-			RGBA8(ref p)  => {
-				let n = p.iter().map(|i| i.to_luma()).collect();
-				Luma8(n)
-			}
-		}
-	}
-
-	pub fn invert(&mut self) {
-		match *self {
-			Luma8(ref mut p)  => {
-				for i in p.mut_iter() {
-					i.invert();
-				}
-			}
-
-			LumaA8(ref mut p) => {
-				for i in p.mut_iter() {
-					i.invert();
-				}
-			}
-
-			RGB8(ref mut p)   =>  {
-				for i in p.mut_iter() {
-					i.invert();
-				}
-			}
-
-			RGBA8(ref mut p)  =>  {
-				for i in p.mut_iter() {
-					i.invert();
-				}
-			}
-		}
-	}
-}
-
 /// A Generic representation of an image
 #[deriving(Clone)]
 pub struct Image {
-	pixels:  PixelBuf,
+	pixels:  pixels::PixelBuf,
 	width:   u32,
 	height:  u32,
 	color:   ColorType,
@@ -245,48 +173,10 @@ impl Image {
 		Ok(r)
 	}
 
-	/// Return a reference to the pixel buffer of this image.
+	/// Return the pixel buffer of this image.
 	/// Its interpretation is dependent on the image's ```ColorType```.
-	pub fn raw_pixels(&self) -> Vec<u8> {
-		let mut r = Vec::new();
-
-		//TODO: Consider using mem::transmute
-		match self.pixels {
-			Luma8(ref a) => {
-				for &i in a.iter() {
-					r.push(i.channel());
-				}
-			}
-
-			LumaA8(ref a) => {
-				for &i in a.iter() {
-					let (l, a) = i.channels();
-					r.push(l);
-					r.push(a);
-				}
-			}
-
-			RGB8(ref a)  => {
-				for &i in a.iter() {
-					let (red, g, b) = i.channels();
-					r.push(red);
-					r.push(g);
-					r.push(b);
-				}
-			}
-
-			RGBA8(ref a) => {
-				for &i in a.iter() {
-					let (red, g, b, alpha) = i.channels();
-					r.push(red);
-					r.push(g);
-					r.push(b);
-					r.push(alpha);
-				}
-			}
-		}
-
-		r
+	pub fn raw_pixels(& self) -> Vec<u8> {
+		self.pixels.to_bytes()
 	}
 
 	/// Returns a tuple of the image's width and height.
@@ -299,97 +189,35 @@ impl Image {
 		self.color
 	}
 
+	/// Return a grayscale version of this image.
 	pub fn grayscale(&self) -> Image {
+		let pixels = pixels::grayscale(&self.pixels);
+
 		Image {
-			pixels: self.pixels.grayscale(),
+			pixels: pixels,
 			width:  self.width,
 			height: self.height,
 			color:  colortype::Grey(8),
 		}
 	}
 
+	/// Invert the colors of this image.
+	/// This method operates inplace.
 	pub fn invert(&mut self) {
-		self.pixels.invert();
+		pixels::invert(&mut self.pixels);
 	}
 }
 
 fn decoder_to_image<I: ImageDecoder>(codec: I) -> ImageResult<Image> {
-	use std::mem;
 	let mut codec = codec;
 
 	let color  = try!(codec.colortype());
 	let buf    = try!(codec.read_image());
 	let (w, h) = try!(codec.dimensions());
 
-	//TODO: Consider using mem::transmute
-	let pixels = match color {
-		colortype::Rgb(8) => {
-			let p = {
-				/*buf.as_slice()
-				   .chunks(3)
-				   .map(|a| RGB::<u8>(a[0], a[1], a[2]))
-				   .collect()*/
-
-				let size = mem::size_of::<RGB<u8>>();
-				assert!(buf.len() % size == 0);
-
-				unsafe {
-					let len = buf.len() / size;
-					let mut v: Vec<RGB<u8>> = mem::transmute(buf);
-					v.set_len(len);
-
-					v
-				}
-			};
-
-			RGB8(p)
-		}
-
-		colortype::Rgba(8) => {
-			let p = {
-				/*buf.as_slice()
-				   .chunks(4)
-				   .map(|a| RGBA::<u8>(a[0], a[1], a[2], a[3]))
-				   .collect()*/
-
-				let size = mem::size_of::<RGBA<u8>>();
-				assert!(buf.len() % size == 0);
-
-				unsafe {
-					let len = buf.len() / size;
-					let mut v: Vec<RGBA<u8>> = mem::transmute(buf);
-					v.set_len(len);
-
-					v
-				}
-			};
-
-			RGBA8(p)
-		}
-
-		colortype::Grey(8) => {
-			let p = {
-				/*buf.as_slice()
-				   .iter()
-				   .map(|a| Luma::<u8>(*a))
-				   .collect()*/
-
-				let size = mem::size_of::<Luma<u8>>();
-				assert!(buf.len() % size == 0);
-
-				unsafe {
-					let len = buf.len() / size;
-					let mut v: Vec<Luma<u8>> = mem::transmute(buf);
-					v.set_len(len);
-
-					v
-				}
-			};
-
-			Luma8(p)
-		}
-
-		_ => return Err(UnsupportedColor)
+	let pixels = match pixels::PixelBuf::from_bytes(buf, color) {
+		Some(p) => p,
+		None    => return Err(UnsupportedColor)
 	};
 
 	let im = Image {

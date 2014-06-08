@@ -287,7 +287,7 @@ impl<R: Reader> ImageDecoder for GIFDecoder<R> {
 	fn colortype(&mut self) -> ImageResult<colortype::ColorType> {
 		let _ = try!(self.read_metadata());
 
-		Ok(colortype::Rgb(8))
+		Ok(colortype::RGB(8))
 	}
 
 	fn row_len(&mut self) -> ImageResult<uint> {

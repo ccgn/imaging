@@ -35,6 +35,7 @@ pub mod ppm;
 
 mod hash;
 mod image;
+mod pixels;
 mod transform;
 mod deflate;
 mod zlib;

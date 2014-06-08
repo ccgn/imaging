@@ -43,7 +43,7 @@ fn main() {
 	im.invert();
 	let after = time::precise_time_ns();
 
-			println!("inverted in {} ms", (after - now) / (1000 * 1000));
+	println!("inverted in {} ms", (after - now) / (1000 * 1000));
 
 
 	let t = im.clone();

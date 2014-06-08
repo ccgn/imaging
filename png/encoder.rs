@@ -87,16 +87,16 @@ fn build_ihdr(width: u32, height: u32, c: colortype::ColorType) -> (Vec<u8>, uin
 		colortype::Grey(4)    => (0, 4),
 		colortype::Grey(8)    => (0, 8),
 		colortype::Grey(16)   => (0, 16),
-		colortype::Rgb(8)     => (2, 8),
-		colortype::Rgb(16)    => (2, 16),
+		colortype::RGB(8)     => (2, 8),
+		colortype::RGB(16)    => (2, 16),
 		colortype::Palette(1) => (3, 1),
 		colortype::Palette(2) => (3, 2),
 		colortype::Palette(4) => (3, 4),
 		colortype::Palette(8) => (3, 8),
 		colortype::GreyA(8)   => (4, 8),
 		colortype::GreyA(16)  => (4, 16),
-		colortype::Rgba(8)    => (6, 8),
-		colortype::Rgba(16)   => (6, 16),
+		colortype::RGBA(8)    => (6, 8),
+		colortype::RGBA(16)   => (6, 16),
 		_ => fail!("unsupported color type and bitdepth")
 	};
 
