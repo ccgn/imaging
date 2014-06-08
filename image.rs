@@ -159,16 +159,19 @@ impl PixelBuf {
 					i.invert();
 				}
 			}
+
 			LumaA8(ref mut p) => {
 				for i in p.mut_iter() {
 					i.invert();
 				}
 			}
+
 			RGB8(ref mut p)   =>  {
 				for i in p.mut_iter() {
 					i.invert();
 				}
 			}
+
 			RGBA8(ref mut p)  =>  {
 				for i in p.mut_iter() {
 					i.invert();
@@ -255,6 +258,14 @@ impl Image {
 				}
 			}
 
+			LumaA8(ref a) => {
+				for &i in a.iter() {
+					let (l, a) = i.channels();
+					r.push(l);
+					r.push(a);
+				}
+			}
+
 			RGB8(ref a)  => {
 				for &i in a.iter() {
 					let (red, g, b) = i.channels();
@@ -273,8 +284,6 @@ impl Image {
 					r.push(alpha);
 				}
 			}
-
-			_  => fail!("unimplemented")
 		}
 
 		r
@@ -305,6 +314,7 @@ impl Image {
 }
 
 fn decoder_to_image<I: ImageDecoder>(codec: I) -> ImageResult<Image> {
+	use std::mem;
 	let mut codec = codec;
 
 	let color  = try!(codec.colortype());
@@ -314,27 +324,68 @@ fn decoder_to_image<I: ImageDecoder>(codec: I) -> ImageResult<Image> {
 	//TODO: Consider using mem::transmute
 	let pixels = match color {
 		colortype::Rgb(8) => {
-			let p = buf.as_slice()
+			let p = {
+				/*buf.as_slice()
 				   .chunks(3)
 				   .map(|a| RGB::<u8>(a[0], a[1], a[2]))
-				   .collect();
+				   .collect()*/
+
+				let size = mem::size_of::<RGB<u8>>();
+				assert!(buf.len() % size == 0);
+
+				unsafe {
+					let len = buf.len() / size;
+					let mut v: Vec<RGB<u8>> = mem::transmute(buf);
+					v.set_len(len);
+
+					v
+				}
+			};
+
 			RGB8(p)
 		}
 
 		colortype::Rgba(8) => {
-			let p = buf.as_slice()
+			let p = {
+				/*buf.as_slice()
 				   .chunks(4)
 				   .map(|a| RGBA::<u8>(a[0], a[1], a[2], a[3]))
-				   .collect();
+				   .collect()*/
+
+				let size = mem::size_of::<RGBA<u8>>();
+				assert!(buf.len() % size == 0);
+
+				unsafe {
+					let len = buf.len() / size;
+					let mut v: Vec<RGBA<u8>> = mem::transmute(buf);
+					v.set_len(len);
+
+					v
+				}
+			};
 
 			RGBA8(p)
 		}
 
 		colortype::Grey(8) => {
-			let p = buf.as_slice()
+			let p = {
+				/*buf.as_slice()
 				   .iter()
 				   .map(|a| Luma::<u8>(*a))
-				   .collect();
+				   .collect()*/
+
+				let size = mem::size_of::<Luma<u8>>();
+				assert!(buf.len() % size == 0);
+
+				unsafe {
+					let len = buf.len() / size;
+					let mut v: Vec<Luma<u8>> = mem::transmute(buf);
+					v.set_len(len);
+
+					v
+				}
+			};
+
 			Luma8(p)
 		}
 
