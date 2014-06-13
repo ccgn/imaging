@@ -1,3 +1,5 @@
+#SEE https://github.com/PistonDevelopers/rust-image for up to date development
+
 #Rust image-formats
 Learning Rust; Implementing image formats
 
