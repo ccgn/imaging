@@ -17,12 +17,12 @@ use super::filter::unfilter;
 use super::PNGSIGNATURE;
 
 macro_rules! io_try(
-	($e:expr) => (
-		match $e {
-			Ok(e) => e,
-			Err(_) => return Err(image::IoError)
-		}
-	)
+    ($e:expr) => (
+    	match $e {
+    		Ok(e) => e,
+    		Err(_) => return Err(image::IoError)
+    	}
+    )
 )
 
 #[deriving(PartialEq)]
@@ -93,7 +93,7 @@ impl<R: Reader> PNGDecoder<R> {
 
 	///Returns a reference to the color palette used for indexed
 	///color images.
-	///Each array element is a tuple of Rgb values.
+	///Each array element is a tuple of RGB values.
 	pub fn palette<'a>(&'a self) -> &'a [(u8, u8, u8)] {
 		match self.palette {
 			Some(ref p) => p.as_slice(),
@@ -212,10 +212,8 @@ impl<R: Reader> PNGDecoder<R> {
 
 			self.crc.update(chunk);
 
-			let s = {
-				let a = str::from_utf8_owned(self.chunk_type.clone());
-				a.unwrap()
-			};
+			let s =  str::from_utf8_owned(self.chunk_type.clone())
+				.unwrap_or(String::from_str(""));
 
 			match (s.as_slice(), self.state) {
 				("IHDR", HaveSignature) => {
@@ -224,7 +222,7 @@ impl<R: Reader> PNGDecoder<R> {
 					}
 
 					let d = io_try!(self.z.inner().r.read_exact(length as uint));
-					let _ = self.parse_ihdr(d);
+					try!(self.parse_ihdr(d));
 
 					self.state = HaveIHDR;
 				}
@@ -336,7 +334,7 @@ impl<R: Reader> ImageDecoder for PNGDecoder<R> {
 			let _ = try!(self.read_metadata());
 		}
 
-		let rowlen = try!(self.row_len());
+		let rowlen  = try!(self.row_len());
 		let mut buf = Vec::from_elem(rowlen * self.height as uint, 0u8);
 
 		for chunk in buf.as_mut_slice().mut_chunks(rowlen) {
@@ -360,73 +358,162 @@ fn expand_palette(buf: &mut[u8], palette: &[(u8, u8, u8)], entries: uint) {
 }
 
 pub struct IDATReader<R> {
-pub r: R,
-pub crc: Crc32,
+	pub r: R,
+	pub crc: Crc32,
 
-eof: bool,
-chunk_length: u32,
+	eof: bool,
+	chunk_length: u32,
 }
 
 impl<R:Reader> IDATReader<R> {
-pub fn new(r: R) -> IDATReader<R> {
-IDATReader {
-r: r,
-crc: Crc32::new(),
-eof: false,
-chunk_length: 0,
-}
-}
+	pub fn new(r: R) -> IDATReader<R> {
+		IDATReader {
+			r: r,
+			crc: Crc32::new(),
+			eof: false,
+			chunk_length: 0,
+		}
+	}
 
-pub fn set_inital_length(&mut self, len: u32) {
-self.chunk_length = len;
-}
+	pub fn set_inital_length(&mut self, len: u32) {
+		self.chunk_length = len;
+	}
 }
 
 impl<R: Reader> Reader for IDATReader<R> {
-fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
-if self.eof {
-return Err(io::standard_error(io::EndOfFile))
+	fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
+		if self.eof {
+			return Err(io::standard_error(io::EndOfFile))
+		}
+
+		let len = buf.len();
+		let mut start = 0;
+
+		while start < len {
+			let m = cmp::min(len - start, self.chunk_length as uint);
+
+			let slice = buf.mut_slice(start, start + m);
+			let r = try!(self.r.read(slice));
+
+			start += r;
+
+			self.chunk_length -= r as u32;
+			self.crc.update(slice.as_slice());
+
+			if self.chunk_length == 0 {
+				let chunk_crc = try!(self.r.read_be_u32());
+				let crc = self.crc.checksum();
+				if crc != chunk_crc {
+					return Err(io::standard_error(io::InvalidInput))
+				}
+
+				self.crc.reset();
+
+				self.chunk_length = try!(self.r.read_be_u32());
+
+				let v = try!(self.r.read_exact(4));
+				self.crc.update(v.as_slice());
+
+				match str::from_utf8(v.as_slice()) {
+					Some("IDAT") => (),
+					_ 	     => {
+						self.eof = true;
+						break
+					}
+				}
+			}
+		}
+		Ok(start)
+	}
 }
 
-let len = buf.len();
-let mut start = 0;
+#[cfg(test)]
+mod tests {
+	extern crate glob;
+   	extern crate core;
 
-while start < len {
-while self.chunk_length == 0 {
-let chunk_crc = try!(self.r.read_be_u32());
-let crc = self.crc.checksum();
+   	use image::{Image, ImageResult, PNG};
+	use std::io::{File};
 
-if crc != chunk_crc {
-return Err(io::standard_error(io::InvalidInput))
-}
+	/// Filters the testsuite images for certain features
+	fn get_testimages(feature: &str, color_type: &str, test_interlaced: bool) -> Vec<Path> {
+		let ret: Vec<Path>;
+		//"../testsuites/PngSuite-2013jan13/*.png"
+		let pattern = Path::new("..").join_many(
+			["testsuites", "PngSuite-2013jan13", "*.png"]);
 
-self.crc.reset();
+		let mut paths = glob::glob(pattern.as_str().unwrap())
+			.filter(|ref p| p.filename_str().unwrap().starts_with(feature))
+			.filter(|ref p| p.filename_str().unwrap().contains(color_type));
 
-self.chunk_length = try!(self.r.read_be_u32());
+		if test_interlaced {
+			ret = paths.collect();
+		} else {
+			ret = paths.filter(|ref p| !p.filename_str().unwrap().slice_from(2).contains("i")).collect();
+		}
 
-let v = try!(self.r.read_exact(4));
-self.crc.update(v.as_slice());
+		assert!(ret.len() > 0) // fail if no testimages are available
+		ret
+	}
 
-match str::from_utf8(v.as_slice()) {
-Some("IDAT") => (),
-_ => {
-self.eof = true;
-break
-}
-}
-}
+	fn open_img(path: &Path) -> ImageResult<Image> {
+		Image::load(File::open(path), PNG)
+	}
 
-let m = cmp::min(len - start, self.chunk_length as uint);
+	#[test]
+	/// Test image filters
+	fn test_filters() {
+		let images = get_testimages("f", "", false);
 
-let slice = buf.mut_slice(start, start + m);
-let r = try!(self.r.read(slice));
+		for path in images.iter() {
+			assert!(match open_img(path) {
+				Ok(_) => true,
+				Err(err) => { println!("file {}, failed with {}", path.display(), err); false }
+			})
+		}
+	}
+	#[test]
+	/// Test basic formats filters
+	fn test_basic() {
+		let images = get_testimages("b", "2c", false);
 
-start += r;
+		for path in images.iter() {
+			assert!(match open_img(path) {
+				Ok(_) => true,
+				Err(err) => {println!("file {}, failed with {}", path.display(), err); false }
+			})
+		}
+	}
 
-self.chunk_length -= r as u32;
-self.crc.update(slice.as_slice());
-}
+	#[test]
+	/// Chunk ordering
+	fn test_chunk_ordering() {
+		let images = get_testimages("o", "", false);
 
-Ok(start)
-}
+		for path in images.iter() {
+			assert!(match open_img(path) {
+				Ok(_) => { true },
+				Err(err) => {println!("file {}, failed with {}", path.display(), err); false }
+			})
+		}
+	}
+
+	#[test]
+	/// Test corrupted images, they should all fail
+	fn test_corrupted() {
+		let images = get_testimages("x", "", true);
+		let num_images = images.len();
+		let mut fails = 0;
+
+		for path in images.iter() {
+			match open_img(path) {
+				Ok(_) => println!("corrupted file {} did not fail", path.display()),
+				Err(_) => {
+					fails += 1;
+				}
+			}
+		}
+
+		assert_eq!(num_images, fails)
+	}
 }

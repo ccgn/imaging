@@ -1,6 +1,7 @@
 use std::io;
 use std::slice;
 
+use sample;
 use pixels;
 use colortype;
 use colortype::ColorType;
@@ -205,6 +206,72 @@ impl Image {
 	/// This method operates inplace.
 	pub fn invert(&mut self) {
 		pixels::invert(&mut self.pixels);
+	}
+
+	/// Resize this image using the specified filter algorithm.
+	/// Returns a new image. The image's aspect ratio is preserved.
+	///```width``` and ```height``` are the new image's dimensions
+	pub fn resize(&self, width: u32, height: u32, filter: sample::FilterType) -> Image {
+		let ratio  = self.width as f32 / self.height as f32;
+		let nratio = width as f32 / height as f32;
+
+		let scale = if nratio > ratio {
+			height as f32 / self.height as f32
+		} else {
+			width as f32 / self.width as f32
+		};
+
+		let width  = (self.width as f32 * scale) as u32;
+		let height = (self.height as f32 * scale) as u32;
+
+		let pixels = pixels::resize(&self.pixels,
+					    self.width,
+					    self.height,
+					    width,
+					    height,
+					    filter);
+
+		Image {
+			pixels: pixels,
+			width:  width,
+			height: height,
+			color:  self.color
+		}
+	}
+
+	/// Resize this image using the specified filter algorithm.
+	/// Returns a new image. Does not preserve aspect ratio.
+	///```width``` and ```height``` are the new image's dimensions
+	pub fn resize_exact(&self, width: u32, height: u32, filter: sample::FilterType) -> Image {
+		let pixels = pixels::resize(&self.pixels,
+					    self.width,
+					    self.height,
+					    width,
+					    height,
+					    filter);
+
+		Image {
+			pixels: pixels,
+			width:  width,
+			height: height,
+			color:  self.color
+		}
+	}
+
+	/// Perfomrs a Gausian blur on this image.
+	/// ```sigma``` is a meausure of how much to blur by.
+	pub fn blur(&self, sigma: f32) -> Image {
+		let pixels = pixels::blur(&self.pixels,
+					  self.width,
+					  self.height,
+					  sigma);
+
+		Image {
+			pixels: pixels,
+			width:  self.width,
+			height: self.height,
+			color:  self.color
+		}
 	}
 }
 
