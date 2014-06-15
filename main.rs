@@ -48,4 +48,15 @@ fn main() {
 		let g = t.resize(1200, 1200, image::CatmullRom);
 		let _    = g.save(fout, PNG);
 	});
+
+	let t = im.clone();
+	spawn(proc() {
+		let fout = File::create(&Path::new(format!("{}3.png", os::args().as_slice()[1]))).unwrap();
+
+		let f = &[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+
+		let g = t.filter3x3(f).filter3x3(f).filter3x3(f).filter3x3(f).filter3x3(f);
+
+		let _    = g.save(fout, PNG);
+	});
 }
