@@ -1,5 +1,3 @@
-#I'm developing an alternate library at https://github.com/PistonDevelopers/rust-image
-
 #Rust image-formats
 Learning Rust; Implementing image formats
 
@@ -11,3 +9,6 @@ Learning Rust; Implementing image formats
 
 ###BUGS
 + Paletted images < 8 bits per pixel not handled properly
+
+
+#I'm developing an alternate library at https://github.com/PistonDevelopers/rust-image
