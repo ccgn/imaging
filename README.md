@@ -1,4 +1,4 @@
-#SEE https://github.com/PistonDevelopers/rust-image for up to date development
+#I'm developing an alternate library at https://github.com/PistonDevelopers/rust-image
 
 #Rust image-formats
 Learning Rust; Implementing image formats
