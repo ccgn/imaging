@@ -1,6 +1,5 @@
 //! Types and functions for dealing with pixels.
 
-use std::mem;
 use std::num::cast;
 use std::num::Bounded;
 
@@ -383,78 +382,70 @@ pub enum PixelBuf {
 }
 
 impl PixelBuf {
+	pub fn as_luma8<'a>(&'a self) -> Option<&'a [Luma<u8>]> {
+		match *self {
+			Luma8(ref p) => Some(p.as_slice()),
+			_ 	     => None
+		}
+	}
+
+	pub fn as_luma_alpha8<'a>(&'a self) -> Option<&'a [LumaA<u8>]> {
+		match *self {
+			LumaA8(ref p) => Some(p.as_slice()),
+			_ 	      => None
+		}
+	}
+
+	pub fn as_rgb8<'a>(&'a self) -> Option<&'a [Rgb<u8>]> {
+		match *self {
+			Rgb8(ref p) => Some(p.as_slice()),
+			_ 	    => None
+		}
+	}
+
+	pub fn as_rgba8<'a>(&'a self) -> Option<&'a [Rgba<u8>]> {
+		match *self {
+			Rgba8(ref p) => Some(p.as_slice()),
+			_ 	     => None
+		}
+	}
+
 	/// Convert from a vector of bytes to a ```PixelBuf```
 	/// Returns ```None``` if the conversion cannot be done.
 	pub fn from_bytes(buf: Vec<u8>, color: ColorType) -> Option<PixelBuf> {
-		// This can be done safely by using iterators:
-		//
-		// buf.as_slice()
-		//    .chunks(3)
-		//    .map(|a| Rgb::<u8>(a[0], a[1], a[2]))
-		//    .collect();
-		//
-		// but requires a copy of ```buf``` to be made,
-		// whereas mem::transmute() operates inplace and
-		// elides traversing the vector.
-
 		match color {
 			colortype::RGB(8) => {
-				let p = unsafe {
-					let size = mem::size_of::<Rgb<u8>>();
-
-					assert!(size == 3);
-					assert!(buf.len() % size == 0);
-
-					let len = buf.len() / size;
-					let mut tmp: Vec<Rgb<u8>> = mem::transmute(buf);
-					tmp.set_len(len);
-					tmp
-				};
+				let p = buf.as_slice()
+					   .chunks(3)
+					   .map(|a| Rgb::<u8>(a[0], a[1], a[2]))
+					   .collect();
 
 				Some(Rgb8(p))
 			}
 
 			colortype::RGBA(8) => {
-				let p = unsafe {
-					let size = mem::size_of::<Rgba<u8>>();
-
-					assert!(size == 4);
-					assert!(buf.len() % size == 0);
-
-					let len = buf.len() / size;
-					let mut tmp: Vec<Rgba<u8>> = mem::transmute(buf);
-					tmp.set_len(len);
-					tmp
-				};
+				let p = buf.as_slice()
+					   .chunks(4)
+					   .map(|a| Rgba::<u8>(a[0], a[1], a[2], a[3]))
+					   .collect();
 
 				Some(Rgba8(p))
 			}
 
 			colortype::Grey(8) => {
-				let p = unsafe {
-					let size = mem::size_of::<Luma<u8>>();
-
-					assert!(size == 1);
-
-					let tmp: Vec<Luma<u8>> = mem::transmute(buf);
-					tmp
-				};
+				let p = buf.as_slice()
+					   .iter()
+					   .map(|a| Luma::<u8>(*a))
+					   .collect();
 
 				Some(Luma8(p))
 			}
 
 			colortype::GreyA(8) => {
-				let p = unsafe {
-					let size = mem::size_of::<LumaA<u8>>();
-
-					assert!(size == 2);
-					assert!(buf.len() % size == 0);
-
-					let len = buf.len() / size;
-					let mut tmp: Vec<LumaA<u8>> = mem::transmute(buf);
-					tmp.set_len(len);
-					tmp
-				};
+				let p = buf.as_slice()
+					   .chunks(2)
+					   .map(|a| LumaA::<u8>(a[0], a[1]))
+					   .collect();
 
 				Some(LumaA8(p))
 			}
@@ -467,8 +458,6 @@ impl PixelBuf {
 	pub fn to_bytes(&self) -> Vec<u8> {
 		let mut r = Vec::new();
 
-		//TODO: Consider using mem::transmute
-		// and returning a reference
 		match *self {
 			Luma8(ref a) => {
 				for &i in a.iter() {
