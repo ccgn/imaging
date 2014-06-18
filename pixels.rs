@@ -365,6 +365,20 @@ impl<T: Primitive> Pixel<T> for LumaA<T> {
 	}
 }
 
+pub enum PixelBufSlice<'a> {
+	Luma8Slice(&'a [Luma<u8>]),
+	LumaA8Slice(&'a [LumaA<u8>]),
+	Rgb8Slice(&'a [Rgb<u8>]),
+	Rgba8Slice(&'a [Rgba<u8>]),
+}
+
+pub enum PixelBufMutSlice<'a> {
+	Luma8MutSlice(&'a mut [Luma<u8>]),
+	LumaA8MutSlice(&'a mut [LumaA<u8>]),
+	Rgb8MutSlice(&'a mut [Rgb<u8>]),
+	Rgba8MutSlice(&'a mut [Rgba<u8>]),
+}
+
 /// An abstraction over a vector of pixel types
 #[deriving(Clone, Show, PartialEq)]
 pub enum PixelBuf {
@@ -407,6 +421,24 @@ impl PixelBuf {
 		match *self {
 			Rgba8(ref p) => Some(p.as_slice()),
 			_ 	     => None
+		}
+	}
+
+	pub fn as_slice<'a>(&'a self) -> PixelBufSlice<'a> {
+		match *self {
+			Luma8(ref p)  => Luma8Slice(p.as_slice()),
+			LumaA8(ref p) => LumaA8Slice(p.as_slice()),
+			Rgb8(ref p)   => Rgb8Slice(p.as_slice()),
+			Rgba8(ref p)  => Rgba8Slice(p.as_slice()),
+		}
+	}
+
+	pub fn as_mut_slice<'a>(&'a mut self) -> PixelBufMutSlice<'a> {
+		match *self {
+			Luma8(ref mut p)  => Luma8MutSlice(p.as_mut_slice()),
+			LumaA8(ref mut p) => LumaA8MutSlice(p.as_mut_slice()),
+			Rgb8(ref mut p)   => Rgb8MutSlice(p.as_mut_slice()),
+			Rgba8(ref mut p)  => Rgba8MutSlice(p.as_mut_slice()),
 		}
 	}
 
