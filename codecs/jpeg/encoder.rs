@@ -4,6 +4,7 @@ use std::iter::range_step;
 
 use colortype;
 use transform;
+
 use super::Component;
 use super::UNZIGZAG;
 use super::derive_codes_and_sizes;

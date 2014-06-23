@@ -20,6 +20,7 @@ macro_rules! io_try(
 	)
 )
 
+/// A Representaion of a Webp Image format decoder.
 pub struct WebpDecoder<R> {
 	r: R,
 	frame: Frame,
@@ -28,6 +29,8 @@ pub struct WebpDecoder<R> {
 }
 
 impl<R: Reader> WebpDecoder<R> {
+	/// Create a new WebpDecoder from the Reader ```r```.
+	/// This function takes ownership of the Reader.
 	pub fn new(r: R) -> WebpDecoder<R> {
 		let f: Frame = Default::default();
 

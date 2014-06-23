@@ -2,7 +2,7 @@ use std::io;
 use std::slice;
 
 use sample;
-use pixels;
+use pixelbuf;
 use colortype;
 use colortype::ColorType;
 
@@ -43,10 +43,19 @@ pub type ImageResult<T> = Result<T, ImageError>;
 /// An enumeration of supported image formats.
 /// Not all formats support both encoding and decoding.
 pub enum ImageFormat {
+	/// An Image in PNG Format
 	PNG,
+
+	/// An Image in JPEG Format
 	JPEG,
+
+	/// An Image in GIF Format
 	GIF,
+
+	/// An Image in WEBP Format
 	WEBP,
+
+	/// An Image in PPM Format
 	PPM
 }
 
@@ -113,7 +122,7 @@ pub trait ImageDecoder {
 /// A Generic representation of an image
 #[deriving(Clone, Show)]
 pub struct Image {
-	pixels:  pixels::PixelBuf,
+	pixels:  pixelbuf::PixelBuf,
 	width:   u32,
 	height:  u32,
 	color:   ColorType,
@@ -192,7 +201,7 @@ impl Image {
 
 	/// Return a grayscale version of this image.
 	pub fn grayscale(&self) -> Image {
-		let pixels = pixels::grayscale(&self.pixels);
+		let pixels = pixelbuf::grayscale(&self.pixels);
 
 		Image {
 			pixels: pixels,
@@ -205,7 +214,7 @@ impl Image {
 	/// Invert the colors of this image.
 	/// This method operates inplace.
 	pub fn invert(&mut self) {
-		pixels::invert(&mut self.pixels);
+		pixelbuf::invert(&mut self.pixels);
 	}
 
 	/// Resize this image using the specified filter algorithm.
@@ -224,7 +233,7 @@ impl Image {
 		let width  = (self.width as f32 * scale) as u32;
 		let height = (self.height as f32 * scale) as u32;
 
-		let pixels = pixels::resize(&self.pixels,
+		let pixels = pixelbuf::resize(&self.pixels,
 					    self.width,
 					    self.height,
 					    width,
@@ -243,7 +252,7 @@ impl Image {
 	/// Returns a new image. Does not preserve aspect ratio.
 	///```width``` and ```height``` are the new image's dimensions
 	pub fn resize_exact(&self, width: u32, height: u32, filter: sample::FilterType) -> Image {
-		let pixels = pixels::resize(&self.pixels,
+		let pixels = pixelbuf::resize(&self.pixels,
 					    self.width,
 					    self.height,
 					    width,
@@ -261,7 +270,7 @@ impl Image {
 	/// Perfomrs a Gausian blur on this image.
 	/// ```sigma``` is a meausure of how much to blur by.
 	pub fn blur(&self, sigma: f32) -> Image {
-		let pixels = pixels::blur(&self.pixels,
+		let pixels = pixelbuf::blur(&self.pixels,
 					  self.width,
 					  self.height,
 					  sigma);
@@ -279,7 +288,7 @@ impl Image {
 	/// ```threshold``` is a control of how much to sharpen.
 	/// see https://en.wikipedia.org/wiki/Unsharp_masking#Digital_unsharp_masking
 	pub fn unsharpen(&self, sigma: f32, threshold: i32) -> Image {
-		let pixels = pixels::unsharpen(&self.pixels,
+		let pixels = pixelbuf::unsharpen(&self.pixels,
 					       self.width,
 					       self.height,
 					       sigma,
@@ -295,7 +304,7 @@ impl Image {
 
 	/// Filters this image with the specified 3x3 kernel.
 	pub fn filter3x3(&self, kernel: &[f32]) -> Image {
-		let pixels = pixels::filter3x3(&self.pixels, self.width, self.height, kernel);
+		let pixels = pixelbuf::filter3x3(&self.pixels, self.width, self.height, kernel);
 
 		Image {
 			pixels: pixels,
@@ -307,7 +316,7 @@ impl Image {
 
 	/// Adjust this image's contrast
 	pub fn adjust_contrast(&self, contrast: f32) -> Image {
-		let pixels = pixels::adjust_contrast(&self.pixels, contrast);
+		let pixels = pixelbuf::adjust_contrast(&self.pixels, contrast);
 
 		Image {
 			pixels: pixels,
@@ -319,7 +328,7 @@ impl Image {
 
 	/// Brighten this image.
 	pub fn brighten(&self, value: i32) -> Image {
-		let pixels = pixels::brighten(&self.pixels, value);
+		let pixels = pixelbuf::brighten(&self.pixels, value);
 
 		Image {
 			pixels: pixels,
@@ -337,9 +346,9 @@ fn decoder_to_image<I: ImageDecoder>(codec: I) -> ImageResult<Image> {
 	let buf    = try!(codec.read_image());
 	let (w, h) = try!(codec.dimensions());
 
-	let pixels = match pixels::PixelBuf::from_bytes(buf, color) {
-		Some(p) => p,
-		None    => return Err(UnsupportedColor)
+	let pixels = match pixelbuf::PixelBuf::from_bytes(buf, color) {
+		Ok(p) => p,
+		_     => return Err(UnsupportedColor)
 	};
 
 	let im = Image {
