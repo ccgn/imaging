@@ -2,14 +2,14 @@ use std::slice;
 use std::io::MemReader;
 use std::default::Default;
 
-use colortype;
-
-use vp8::Frame;
-use vp8::VP8Decoder;
-
 use image;
 use image::ImageResult;
 use image::ImageDecoder;
+
+use imaging::colortype;
+
+use codecs::vp8::Frame;
+use codecs::vp8::VP8Decoder;
 
 macro_rules! io_try(
 	($e:expr) => (

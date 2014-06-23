@@ -1,12 +1,12 @@
 use std::slice;
 use std::io::MemReader;
 
-use colortype;
-use lzw::LZWReader;
-
 use image;
 use image::ImageResult;
 use image::ImageDecoder;
+use imaging::colortype;
+
+use lzw::LZWReader;
 
 macro_rules! io_try(
 	($e:expr) => (

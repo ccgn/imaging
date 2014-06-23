@@ -5,16 +5,16 @@ use std::slice;
 use std::io::IoResult;
 use std::io::MemReader;
 
-use colortype;
-use hash::Crc32;
-use zlib::ZlibDecoder;
-
 use image;
 use image::ImageResult;
 use image::ImageDecoder;
+use imaging::colortype;
 
 use super::filter::unfilter;
 use super::PNGSIGNATURE;
+
+use hash::Crc32;
+use zlib::ZlibDecoder;
 
 macro_rules! io_try(
     ($e:expr) => (

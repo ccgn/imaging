@@ -1,8 +1,10 @@
 //! Functions for altering and converting the color of pixelbufs
-use std::num::cast;
-use std::num::Bounded;
+use std::num::{
+        cast,
+        Bounded
+};
 
-use pixel::{
+use imaging::pixel::{
         Pixel,
         Luma
 };

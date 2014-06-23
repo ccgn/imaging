@@ -4,8 +4,8 @@ use std::io::IoResult;
 use std::num;
 use std::num::ToStrRadix;
 
-use colortype;
-use colortype::{
+use imaging::colortype;
+use imaging::colortype::{
 	Grey,
 	Palette,
 	GreyA,

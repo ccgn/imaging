@@ -1,7 +1,7 @@
 //! Types and functions for working with pixels, where the colortype is not known
 //! at compile time.
 
-use pixel::{
+use imaging::pixel::{
         Pixel,
         Luma,
         LumaA,
@@ -9,10 +9,11 @@ use pixel::{
         Rgba
 };
 
-use colortype;
-use colortype::ColorType;
-use colorops;
-use sample;
+use imaging::{
+    colortype,
+};
+
+use imaging::colortype::ColorType;
 
 /// An abstraction over a vector of pixel types
 #[deriving(Clone, Show, PartialEq, Eq)]
@@ -153,119 +154,5 @@ impl PixelBuf {
                 }
 
                 r
-        }
-}
-
-/// Convert ```pixels``` Pixelbuf to grayscale
-pub fn grayscale(pixels: &PixelBuf) -> PixelBuf {
-        match *pixels {
-                Luma8(ref p)  => Luma8(colorops::grayscale(p.as_slice())),
-                LumaA8(ref p) => Luma8(colorops::grayscale(p.as_slice())),
-                Rgb8(ref p)   => Luma8(colorops::grayscale(p.as_slice())),
-                Rgba8(ref p)  => Luma8(colorops::grayscale(p.as_slice())),
-        }
-}
-
-/// Invert the pixels in ```PixelBuf```
-pub fn invert(pixels: &mut PixelBuf) {
-        match *pixels {
-                Luma8(ref mut p)  => colorops::invert(p.as_mut_slice()),
-                LumaA8(ref mut p) => colorops::invert(p.as_mut_slice()),
-                Rgb8(ref mut p)   => colorops::invert(p.as_mut_slice()),
-                Rgba8(ref mut p)  => colorops::invert(p.as_mut_slice()),
-        }
-}
-
-/// Resize this ```PixelBuf``` pixels.
-/// ```width``` and ```height``` are the original dimensions.
-/// ```nwidth``` and ```nheight``` are the new dimensions.
-pub fn resize(pixels:  &PixelBuf,
-              width:   u32,
-              height:  u32,
-              nwidth:  u32,
-              nheight: u32,
-              filter:  sample::FilterType) -> PixelBuf {
-
-        match *pixels {
-                Luma8(ref p)  => Luma8(sample::resize(p.as_slice(), width, height, nwidth, nheight, filter)),
-                LumaA8(ref p) => LumaA8(sample::resize(p.as_slice(), width, height, nwidth, nheight, filter)),
-                Rgb8(ref p)   => Rgb8(sample::resize(p.as_slice(), width, height, nwidth, nheight, filter)),
-                Rgba8(ref p)  => Rgba8(sample::resize(p.as_slice(), width, height, nwidth, nheight, filter)),
-        }
-}
-
-/// Perfomrs a Gausian blur on this ```Pixelbuf```.
-/// ```width``` and ```height``` are the dimensions of the buffer.
-/// ```sigma``` is a meausure of how much to blur by.
-pub fn blur(pixels:  &PixelBuf,
-            width:   u32,
-            height:  u32,
-            sigma:   f32) -> PixelBuf {
-
-        match *pixels {
-                Luma8(ref p)  => Luma8(sample::blur(p.as_slice(), width, height, sigma)),
-                LumaA8(ref p) => LumaA8(sample::blur(p.as_slice(), width, height, sigma)),
-                Rgb8(ref p)   => Rgb8(sample::blur(p.as_slice(), width, height, sigma)),
-                Rgba8(ref p)  => Rgba8(sample::blur(p.as_slice(), width, height, sigma)),
-        }
-}
-
-/// Performs an unsharpen mask on ```pixels```
-/// ```sigma``` is the amount to blur the image by.
-/// ```threshold``` is a control of how much to sharpen.
-/// see https://en.wikipedia.org/wiki/Unsharp_masking#Digital_unsharp_masking
-pub fn unsharpen(pixels:    &PixelBuf,
-                 width:     u32,
-                 height:    u32,
-                 sigma:     f32,
-                 threshold: i32) -> PixelBuf {
-
-        match *pixels {
-                Luma8(ref p)  => Luma8(sample::unsharpen(p.as_slice(), width, height, sigma, threshold)),
-                LumaA8(ref p) => LumaA8(sample::unsharpen(p.as_slice(), width, height, sigma, threshold)),
-                Rgb8(ref p)   => Rgb8(sample::unsharpen(p.as_slice(), width, height, sigma, threshold)),
-                Rgba8(ref p)  => Rgba8(sample::unsharpen(p.as_slice(), width, height, sigma, threshold)),
-        }
-}
-
-/// Filters the pixelbuf with the specified 3x3 kernel.
-pub fn filter3x3(pixels:  &PixelBuf,
-                 width:   u32,
-                 height:  u32,
-                 kernel:  &[f32]) -> PixelBuf {
-
-        if kernel.len() != 9 {
-                return pixels.clone()
-        }
-
-        match *pixels {
-                Luma8(ref p)  => Luma8(sample::filter3x3(p.as_slice(), width, height, kernel)),
-                LumaA8(ref p) => LumaA8(sample::filter3x3(p.as_slice(), width, height, kernel)),
-                Rgb8(ref p)   => Rgb8(sample::filter3x3(p.as_slice(), width, height, kernel)),
-                Rgba8(ref p)  => Rgba8(sample::filter3x3(p.as_slice(), width, height, kernel)),
-        }
-}
-
-/// Adjust the contrast of ```pixels```
-/// ```contrast``` is the amount to adjust the contrast by.
-/// Negative values decrease the constrast and positive values increase the constrast.
-pub fn adjust_contrast(pixels: &PixelBuf, c: f32) -> PixelBuf {
-        match *pixels {
-                Luma8(ref p)  => Luma8(colorops::contrast(p.as_slice(), c)),
-                LumaA8(ref p) => LumaA8(colorops::contrast(p.as_slice(), c)),
-                Rgb8(ref p)   => Rgb8(colorops::contrast(p.as_slice(), c)),
-                Rgba8(ref p)  => Rgba8(colorops::contrast(p.as_slice(), c)),
-        }
-}
-
-/// Brighten ```pixels```
-/// ```value``` is the amount to brighten each pixel by.
-/// Negative values decrease the brightness and positive values increase it.
-pub fn brighten(pixels: &PixelBuf, c: i32) -> PixelBuf {
-        match *pixels {
-                Luma8(ref p)  => Luma8(colorops::brighten(p.as_slice(), c)),
-                LumaA8(ref p) => LumaA8(colorops::brighten(p.as_slice(), c)),
-                Rgb8(ref p)   => Rgb8(colorops::brighten(p.as_slice(), c)),
-                Rgba8(ref p)  => Rgba8(colorops::brighten(p.as_slice(), c)),
         }
 }

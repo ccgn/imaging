@@ -4,11 +4,13 @@
 // for some of the theory behind image scaling and convolution
 
 use std::f32;
-use std::num::cast;
-use std::num::Bounded;
+use std::num::{
+        cast,
+        Bounded
+};
 use std::default::Default;
 
-use pixel::Pixel;
+use imaging::pixel::Pixel;
 
 /// Available Sampling Filters
 pub enum FilterType {

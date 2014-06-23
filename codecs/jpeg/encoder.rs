@@ -2,7 +2,7 @@ use std::io::MemWriter;
 use std::io::IoResult;
 use std::iter::range_step;
 
-use colortype;
+use imaging::colortype;
 use transform;
 
 use super::Component;
