@@ -550,6 +550,11 @@ pub struct SubImage<'a> {
 }
 
 impl<'a> SubImage<'a> {
+	/// Return the width and height of this subimage
+	pub fn dimensions(&self) -> (u32, u32) {
+		(self.width, self.height)
+	}
+
 	/// Convert this Subimage to an Image
 	pub fn to_image(&self) -> Image {
 		let pixels = match *self.pixels {
@@ -598,14 +603,14 @@ pub struct Tiles<'a> {
 
 impl<'a> Iterator<SubImage<'a>> for Tiles<'a> {
 	fn next(&mut self) -> Option<SubImage<'a>> {
-		let (w, h) = self.image.dimensions();
+		let (width, height) = self.image.dimensions();
 
-		if self.x > w {
+		if self.x > width {
 			self.x = 0;
 			self.y += self.ystride;
 		}
 
-		if self.y > h {
+		if self.y > height {
 			None
 		} else {
 			let sub = self.image.crop(self.x,

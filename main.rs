@@ -31,7 +31,7 @@ fn main() {
 			let fout = File::create(&Path::new(format!("{0}_{1}.png", os::args().as_slice()[1], i))).unwrap();
 
 			let h = g.to_image();
-			let _    = h.save(fout, PNG);
+			let _ = h.save(fout, PNG);
 		}
 	});
 }
