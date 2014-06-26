@@ -1,6 +1,5 @@
 use std::{
 	io,
-	cmp,
 	slice
 };
 
@@ -11,7 +10,6 @@ use imaging::{
 	sample,
 	colorops,
 	affine,
-	pixelbuf,
 	colortype,
 	pixel,
 };
@@ -213,10 +211,10 @@ pub struct GenericImage<T> {
 	color:   ColorType,
 }
 
-impl GenericImage<pixelbuf::PixelBuf> {
+impl GenericImage<PixelBuf> {
 	/// Open the image located at the path specified.
 	/// The image's format is determined from the path's file extension.
-	pub fn open(path: &Path) -> ImageResult<GenericImage<pixelbuf::PixelBuf>> {
+	pub fn open(path: &Path) -> ImageResult<GenericImage<PixelBuf>> {
 		let fin = match io::File::open(path) {
 			Ok(f)  => f,
 			Err(_) => return Err(IoError)
@@ -238,7 +236,7 @@ impl GenericImage<pixelbuf::PixelBuf> {
 	}
 
 	/// Create a new image from ```r```.
-	pub fn load<R: Reader>(r: R, format: ImageFormat) -> ImageResult<GenericImage<pixelbuf::PixelBuf>> {
+	pub fn load<R: Reader>(r: R, format: ImageFormat) -> ImageResult<GenericImage<PixelBuf>> {
 		match format {
 			PNG  => decoder_to_image(png::PNGDecoder::new(r)),
 			GIF  => decoder_to_image(gif::GIFDecoder::new(r)),
@@ -249,7 +247,7 @@ impl GenericImage<pixelbuf::PixelBuf> {
 	}
 
 	/// Create a new image from a byte slice
-	pub fn load_from_memory(buf: &[u8], format: ImageFormat) -> ImageResult<GenericImage<pixelbuf::PixelBuf>> {
+	pub fn load_from_memory(buf: &[u8], format: ImageFormat) -> ImageResult<GenericImage<PixelBuf>> {
 		let b = io::BufReader::new(buf);
 
 		GenericImage::load(b, format)
@@ -298,7 +296,7 @@ impl GenericImage<pixelbuf::PixelBuf> {
 	}
 }
 
-impl ImageOps for GenericImage<pixelbuf::PixelBuf> {
+impl ImageOps for GenericImage<PixelBuf> {
 	/// Returns a tuple of the image's width and height.
 	fn dimensions(&self) -> (u32, u32) {
 		(self.width, self.height)
@@ -323,7 +321,7 @@ impl ImageOps for GenericImage<pixelbuf::PixelBuf> {
 	/// Resize this image using the specified filter algorithm.
 	/// Returns a new image. The image's aspect ratio is preserved.
 	///```nwidth``` and ```nheight``` are the new image's dimensions
-	fn resize(&self, nwidth: u32, nheight: u32, filter: sample::FilterType) -> GenericImage<pixelbuf::PixelBuf> {
+	fn resize(&self, nwidth: u32, nheight: u32, filter: sample::FilterType) -> GenericImage<PixelBuf> {
 		let ratio  = self.width as f32 / self.height as f32;
 		let nratio = nwidth as f32 / nheight as f32;
 
@@ -342,7 +340,7 @@ impl ImageOps for GenericImage<pixelbuf::PixelBuf> {
 	/// Resize this image using the specified filter algorithm.
 	/// Returns a new image. Does not preserve aspect ratio.
 	///```nwidth``` and ```nheight``` are the new image's dimensions
-	fn resize_exact(&self, nwidth: u32, nheight: u32, filter: sample::FilterType) -> GenericImage<pixelbuf::PixelBuf> {
+	fn resize_exact(&self, nwidth: u32, nheight: u32, filter: sample::FilterType) -> GenericImage<PixelBuf> {
 		let width   = self.width;
 		let height  = self.height;
 
@@ -363,7 +361,7 @@ impl ImageOps for GenericImage<pixelbuf::PixelBuf> {
 
 	/// Perfomrs a Gausian blur on this image.
 	/// ```sigma``` is a meausure of how much to blur by.
-	fn blur(&self, sigma: f32) -> GenericImage<pixelbuf::PixelBuf> {
+	fn blur(&self, sigma: f32) -> GenericImage<PixelBuf> {
 		let width   = self.width;
 		let height  = self.height;
 
@@ -386,7 +384,7 @@ impl ImageOps for GenericImage<pixelbuf::PixelBuf> {
 	/// ```sigma``` is the amount to blur the image by.
 	/// ```threshold``` is a control of how much to sharpen.
 	/// see https://en.wikipedia.org/wiki/Unsharp_masking#Digital_unsharp_masking
-	fn unsharpen(&self, sigma: f32, threshold: i32) -> GenericImage<pixelbuf::PixelBuf> {
+	fn unsharpen(&self, sigma: f32, threshold: i32) -> GenericImage<PixelBuf> {
 		let width   = self.width;
 		let height  = self.height;
 
@@ -406,7 +404,7 @@ impl ImageOps for GenericImage<pixelbuf::PixelBuf> {
 	}
 
 	/// Filters this image with the specified 3x3 kernel.
-	fn filter3x3(&self, kernel: &[f32]) -> GenericImage<pixelbuf::PixelBuf> {
+	fn filter3x3(&self, kernel: &[f32]) -> GenericImage<PixelBuf> {
 		let width   = self.width;
 		let height  = self.height;
 
@@ -432,7 +430,7 @@ impl ImageOps for GenericImage<pixelbuf::PixelBuf> {
 	/// Adjust the contrast of ```pixels```
 	/// ```contrast``` is the amount to adjust the contrast by.
 	/// Negative values decrease the constrast and positive values increase the constrast.
-	fn adjust_contrast(&self, c: f32) -> GenericImage<pixelbuf::PixelBuf> {
+	fn adjust_contrast(&self, c: f32) -> GenericImage<PixelBuf> {
 		let pixels = match self.pixels {
 	                Luma8(ref p)  => Luma8(colorops::contrast(p.as_slice(), c)),
 	                LumaA8(ref p) => LumaA8(colorops::contrast(p.as_slice(), c)),
@@ -451,7 +449,7 @@ impl ImageOps for GenericImage<pixelbuf::PixelBuf> {
 	/// Brighten ```pixels```
 	/// ```value``` is the amount to brighten each pixel by.
 	/// Negative values decrease the brightness and positive values increase it.
-	fn brighten(&self, value: i32) -> GenericImage<pixelbuf::PixelBuf> {
+	fn brighten(&self, value: i32) -> GenericImage<PixelBuf> {
 		let pixels = match self.pixels {
 	                Luma8(ref p)  => Luma8(colorops::brighten(p.as_slice(), value)),
 	                LumaA8(ref p) => LumaA8(colorops::brighten(p.as_slice(), value)),
@@ -468,7 +466,7 @@ impl ImageOps for GenericImage<pixelbuf::PixelBuf> {
 	}
 
 	///Flip this image vertically
-	fn flipv(&self) -> GenericImage<pixelbuf::PixelBuf> {
+	fn flipv(&self) -> GenericImage<PixelBuf> {
 		let pixels = match self.pixels {
 	                Luma8(ref p)  => Luma8(affine::flip_vertical(p.as_slice(), self.width, self.height)),
 	                LumaA8(ref p) => LumaA8(affine::flip_vertical(p.as_slice(), self.width, self.height)),
@@ -485,7 +483,7 @@ impl ImageOps for GenericImage<pixelbuf::PixelBuf> {
 	}
 
 	///Flip this image horizontally
-	fn fliph(&self) -> GenericImage<pixelbuf::PixelBuf> {
+	fn fliph(&self) -> GenericImage<PixelBuf> {
 		let pixels = match self.pixels {
 	                Luma8(ref p)  => Luma8(affine::flip_horizontal(p.as_slice(), self.width, self.height)),
 	                LumaA8(ref p) => LumaA8(affine::flip_horizontal(p.as_slice(), self.width, self.height)),
@@ -502,7 +500,7 @@ impl ImageOps for GenericImage<pixelbuf::PixelBuf> {
 	}
 
 	///Rotate this image 90 degrees clockwise.
-	fn rotate90(&self) -> GenericImage<pixelbuf::PixelBuf> {
+	fn rotate90(&self) -> GenericImage<PixelBuf> {
 		let pixels = match self.pixels {
 	                Luma8(ref p)  => Luma8(affine::rotate90(p.as_slice(), self.width, self.height)),
 	                LumaA8(ref p) => LumaA8(affine::rotate90(p.as_slice(), self.width, self.height)),
@@ -519,7 +517,7 @@ impl ImageOps for GenericImage<pixelbuf::PixelBuf> {
 	}
 
 	///Rotate this image 180 degrees clockwise.
-	fn rotate180(&self) -> GenericImage<pixelbuf::PixelBuf> {
+	fn rotate180(&self) -> GenericImage<PixelBuf> {
 		let pixels = match self.pixels {
 	                Luma8(ref p)  => Luma8(affine::rotate180(p.as_slice(), self.width, self.height)),
 	                LumaA8(ref p) => LumaA8(affine::rotate180(p.as_slice(), self.width, self.height)),
@@ -536,7 +534,7 @@ impl ImageOps for GenericImage<pixelbuf::PixelBuf> {
 	}
 
 	///Rotate this image 270 degrees clockwise.
-	fn rotate270(&self) -> GenericImage<pixelbuf::PixelBuf> {
+	fn rotate270(&self) -> GenericImage<PixelBuf> {
 		let pixels = match self.pixels {
 	                Luma8(ref p)  => Luma8(affine::rotate270(p.as_slice(), self.width, self.height)),
 	                LumaA8(ref p) => LumaA8(affine::rotate270(p.as_slice(), self.width, self.height)),
@@ -748,18 +746,18 @@ impl<T: Primitive, P: Pixel<T> + Default + Clone + Copy> ImageOps for GenericIma
 }
 
 ///An Image that can hold any pixel type
-pub type Image     = GenericImage<pixelbuf::PixelBuf>;
+pub type Image     = GenericImage<PixelBuf>;
 pub type RGB8Image = GenericImage<Vec<pixel::Rgb<u8>>>;
 pub type RawImage  = GenericImage<Vec<u8>>;
 
-fn decoder_to_image<I: ImageDecoder>(codec: I) -> ImageResult<GenericImage<pixelbuf::PixelBuf>> {
+fn decoder_to_image<I: ImageDecoder>(codec: I) -> ImageResult<GenericImage<PixelBuf>> {
 	let mut codec = codec;
 
 	let color  = try!(codec.colortype());
 	let buf    = try!(codec.read_image());
 	let (w, h) = try!(codec.dimensions());
 
-	let pixels = match pixelbuf::PixelBuf::from_bytes(buf, color) {
+	let pixels = match PixelBuf::from_bytes(buf, color) {
 		Ok(p) => p,
 		_     => return Err(UnsupportedColor)
 	};
