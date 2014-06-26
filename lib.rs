@@ -41,17 +41,19 @@ pub use image::{
         PPM
 };
 
+pub use ImageOps = image::ImageOps;
+pub use RGB8Image = image::RGB8Image;
+pub use RawImage  = image::RawImage;
 pub use Image = image::Image;
-pub use SubImage = image::SubImage;
-pub use Tiles = image::Tiles;
+pub use GenericImage = image::GenericImage;
 
-pub use JPEGDecoder = codecs::jpeg::JPEGDecoder;
-pub use JPEGEncoder = codecs::jpeg::JPEGEncoder;
-pub use PNGDecoder  = codecs::png::PNGDecoder;
-pub use PNGEncoder  = codecs::png::PNGEncoder;
-pub use GIFDecoder  = codecs::gif::GIFDecoder;
-pub use PPMEncoder  = codecs::ppm::PPMEncoder;
-pub use WebpDecoder = codecs::webp::WebpDecoder;
+//pub use JPEGDecoder = codecs::jpeg::JPEGDecoder;
+//pub use JPEGEncoder = codecs::jpeg::JPEGEncoder;
+//pub use PNGDecoder  = codecs::png::PNGDecoder;
+//pub use PNGEncoder  = codecs::png::PNGEncoder;
+//pub use GIFDecoder  = codecs::gif::GIFDecoder;
+//pub use PPMEncoder  = codecs::ppm::PPMEncoder;
+//pub use WebpDecoder = codecs::webp::WebpDecoder;
 
 ///Image Codecs
 pub mod codecs {

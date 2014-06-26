@@ -13,7 +13,7 @@ fn main() {
 		fail!("Please enter a file")
 	};
 
-	let im = Image::open(&Path::new(file.clone())).unwrap();
+	let im: Image::open(&Path::new(file.clone())).unwrap();
 
 	println!("dimensions {}", im.dimensions());
 	println!("{}", im.colortype());
@@ -25,7 +25,7 @@ fn main() {
 		let _    = t.save(fout, JPEG);
 	});
 
-	let t = im.clone();
+	/*let t = im.clone();
 	spawn(proc() {
 		for (i, g) in t.tiles(100, 100).enumerate() {
 			let fout = File::create(&Path::new(format!("{0}_{1}.png", os::args().as_slice()[1], i))).unwrap();
@@ -33,5 +33,5 @@ fn main() {
 			let h = g.to_image();
 			let _ = h.save(fout, PNG);
 		}
-	});
+	});*/
 }

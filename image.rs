@@ -13,10 +13,11 @@ use imaging::{
 	affine,
 	pixelbuf,
 	colortype,
+	pixel,
 };
 
-
 use imaging::pixel::Pixel;
+use imaging::pixelbuf::PixelBuf;
 use imaging::colortype::ColorType;
 
 use imaging::pixelbuf::{
@@ -64,6 +65,7 @@ pub type ImageResult<T> = Result<T, ImageError>;
 
 /// An enumeration of supported image formats.
 /// Not all formats support both encoding and decoding.
+#[deriving(PartialEq, Eq, Show)]
 pub enum ImageFormat {
 	/// An Image in PNG Format
 	PNG,
@@ -141,19 +143,80 @@ pub trait ImageDecoder {
         }
 }
 
+///Operations that can be performed on Images.
+pub trait ImageOps {
+	/// Returns a tuple of the image's width and height.
+	fn dimensions(&self) -> (u32, u32);
+
+	/// The colortype of this image.
+	fn colortype(&self) -> ColorType;
+
+	/// Invert the colors of this image.
+	/// This method operates inplace.
+	fn invert(&mut self);
+
+	/// Resize this image using the specified filter algorithm.
+	/// Returns a new image. The image's aspect ratio is preserved.
+	///```nwidth``` and ```nheight``` are the new image's dimensions
+	fn resize(&self, nwidth: u32, nheight: u32, filter: sample::FilterType) -> Self;
+
+	/// Resize this image using the specified filter algorithm.
+	/// Returns a new image. Does not preserve aspect ratio.
+	///```nwidth``` and ```nheight``` are the new image's dimensions
+	fn resize_exact(&self, nwidth: u32, nheight: u32, filter: sample::FilterType) -> Self;
+
+	/// Perfomrs a Gausian blur on this image.
+	/// ```sigma``` is a meausure of how much to blur by.
+	fn blur(&self, sigma: f32) -> Self;
+
+	/// Performs an unsharpen mask on ```pixels```
+	/// ```sigma``` is the amount to blur the image by.
+	/// ```threshold``` is a control of how much to sharpen.
+	/// see https://en.wikipedia.org/wiki/Unsharp_masking#Digital_unsharp_masking
+	fn unsharpen(&self, sigma: f32, threshold: i32) -> Self;
+
+	/// Filters this image with the specified 3x3 kernel.
+	fn filter3x3(&self, kernel: &[f32]) -> Self;
+
+	/// Adjust the contrast of ```pixels```
+	/// ```contrast``` is the amount to adjust the contrast by.
+	/// Negative values decrease the constrast and positive values increase the constrast.
+	fn adjust_contrast(&self, c: f32) -> Self;
+
+	/// Brighten ```pixels```
+	/// ```value``` is the amount to brighten each pixel by.
+	/// Negative values decrease the brightness and positive values increase it.
+	fn brighten(&self, value: i32) -> Self;
+
+	///Flip this image vertically
+	fn flipv(&self) -> Self;
+
+	///Flip this image horizontally
+	fn fliph(&self) -> Self;
+
+	///Rotate this image 90 degrees clockwise.
+	fn rotate90(&self) -> Self;
+
+	///Rotate this image 180 degrees clockwise.
+	fn rotate180(&self) -> Self;
+
+	///Rotate this image 270 degrees clockwise.
+	fn rotate270(&self) -> Self;
+}
+
 /// A Generic representation of an image
 #[deriving(Clone, Show)]
-pub struct Image {
-	pixels:  pixelbuf::PixelBuf,
+pub struct GenericImage<T> {
+	pixels:  T,
 	width:   u32,
 	height:  u32,
 	color:   ColorType,
 }
 
-impl Image {
+impl GenericImage<pixelbuf::PixelBuf> {
 	/// Open the image located at the path specified.
 	/// The image's format is determined from the path's file extension.
-	pub fn open(path: &Path) -> ImageResult<Image> {
+	pub fn open(path: &Path) -> ImageResult<GenericImage<pixelbuf::PixelBuf>> {
 		let fin = match io::File::open(path) {
 			Ok(f)  => f,
 			Err(_) => return Err(IoError)
@@ -171,11 +234,11 @@ impl Image {
 			_      => return Err(UnsupportedError)
 		};
 
-		Image::load(fin, format)
+		GenericImage::load(fin, format)
 	}
 
 	/// Create a new image from ```r```.
-	pub fn load<R: Reader>(r: R, format: ImageFormat) -> ImageResult<Image> {
+	pub fn load<R: Reader>(r: R, format: ImageFormat) -> ImageResult<GenericImage<pixelbuf::PixelBuf>> {
 		match format {
 			PNG  => decoder_to_image(png::PNGDecoder::new(r)),
 			GIF  => decoder_to_image(gif::GIFDecoder::new(r)),
@@ -186,10 +249,10 @@ impl Image {
 	}
 
 	/// Create a new image from a byte slice
-	pub fn load_from_memory(buf: &[u8], format: ImageFormat) -> ImageResult<Image> {
+	pub fn load_from_memory(buf: &[u8], format: ImageFormat) -> ImageResult<GenericImage<pixelbuf::PixelBuf>> {
 		let b = io::BufReader::new(buf);
 
-		Image::load(b, format)
+		GenericImage::load(b, format)
 	}
 
 	/// Encode this image and write it to ```w```
@@ -230,40 +293,25 @@ impl Image {
 
 	/// Return the pixel buffer of this image.
 	/// Its interpretation is dependent on the image's ```ColorType```.
-	pub fn raw_pixels(& self) -> Vec<u8> {
+	fn raw_pixels(& self) -> Vec<u8> {
 		self.pixels.to_bytes()
 	}
+}
 
+impl ImageOps for GenericImage<pixelbuf::PixelBuf> {
 	/// Returns a tuple of the image's width and height.
-	pub fn dimensions(&self) -> (u32, u32) {
+	fn dimensions(&self) -> (u32, u32) {
 		(self.width, self.height)
 	}
 
 	/// The colortype of this image.
-	pub fn colortype(&self) -> ColorType {
+	fn colortype(&self) -> ColorType {
 		self.color
-	}
-
-	/// Return a grayscale version of this image.
-	pub fn grayscale(&self) -> Image {
-		let pixels = match self.pixels {
-	                Luma8(ref p)  => Luma8(colorops::grayscale(p.as_slice())),
-	                LumaA8(ref p) => Luma8(colorops::grayscale(p.as_slice())),
-	                Rgb8(ref p)   => Luma8(colorops::grayscale(p.as_slice())),
-	                Rgba8(ref p)  => Luma8(colorops::grayscale(p.as_slice())),
-        	};
-
-		Image {
-			pixels: pixels,
-			width:  self.width,
-			height: self.height,
-			color:  colortype::Grey(8),
-		}
 	}
 
 	/// Invert the colors of this image.
 	/// This method operates inplace.
-	pub fn invert(&mut self) {
+	fn invert(&mut self) {
 		match self.pixels {
 	                Luma8(ref mut p)  => colorops::invert(p.as_mut_slice()),
 	                LumaA8(ref mut p) => colorops::invert(p.as_mut_slice()),
@@ -275,7 +323,7 @@ impl Image {
 	/// Resize this image using the specified filter algorithm.
 	/// Returns a new image. The image's aspect ratio is preserved.
 	///```nwidth``` and ```nheight``` are the new image's dimensions
-	pub fn resize(&self, nwidth: u32, nheight: u32, filter: sample::FilterType) -> Image {
+	fn resize(&self, nwidth: u32, nheight: u32, filter: sample::FilterType) -> GenericImage<pixelbuf::PixelBuf> {
 		let ratio  = self.width as f32 / self.height as f32;
 		let nratio = nwidth as f32 / nheight as f32;
 
@@ -294,7 +342,7 @@ impl Image {
 	/// Resize this image using the specified filter algorithm.
 	/// Returns a new image. Does not preserve aspect ratio.
 	///```nwidth``` and ```nheight``` are the new image's dimensions
-	pub fn resize_exact(&self, nwidth: u32, nheight: u32, filter: sample::FilterType) -> Image {
+	fn resize_exact(&self, nwidth: u32, nheight: u32, filter: sample::FilterType) -> GenericImage<pixelbuf::PixelBuf> {
 		let width   = self.width;
 		let height  = self.height;
 
@@ -305,7 +353,7 @@ impl Image {
 	                Rgba8(ref p)  => Rgba8(sample::resize(p.as_slice(), width, height, nwidth, nheight, filter)),
         	};
 
-		Image {
+		GenericImage {
 			pixels: pixels,
 			width:  nwidth,
 			height: nheight,
@@ -315,7 +363,7 @@ impl Image {
 
 	/// Perfomrs a Gausian blur on this image.
 	/// ```sigma``` is a meausure of how much to blur by.
-	pub fn blur(&self, sigma: f32) -> Image {
+	fn blur(&self, sigma: f32) -> GenericImage<pixelbuf::PixelBuf> {
 		let width   = self.width;
 		let height  = self.height;
 
@@ -326,7 +374,7 @@ impl Image {
 	                Rgba8(ref p)  => Rgba8(sample::blur(p.as_slice(), width, height, sigma)),
         	};
 
-		Image {
+		GenericImage {
 			pixels: pixels,
 			width:  self.width,
 			height: self.height,
@@ -338,7 +386,7 @@ impl Image {
 	/// ```sigma``` is the amount to blur the image by.
 	/// ```threshold``` is a control of how much to sharpen.
 	/// see https://en.wikipedia.org/wiki/Unsharp_masking#Digital_unsharp_masking
-	pub fn unsharpen(&self, sigma: f32, threshold: i32) -> Image {
+	fn unsharpen(&self, sigma: f32, threshold: i32) -> GenericImage<pixelbuf::PixelBuf> {
 		let width   = self.width;
 		let height  = self.height;
 
@@ -349,7 +397,7 @@ impl Image {
 	                Rgba8(ref p)  => Rgba8(sample::unsharpen(p.as_slice(), width, height, sigma, threshold)),
         	};
 
-	    	Image {
+	    	GenericImage {
 			pixels: pixels,
 			width:  self.width,
 			height: self.height,
@@ -358,7 +406,7 @@ impl Image {
 	}
 
 	/// Filters this image with the specified 3x3 kernel.
-	pub fn filter3x3(&self, kernel: &[f32]) -> Image {
+	fn filter3x3(&self, kernel: &[f32]) -> GenericImage<pixelbuf::PixelBuf> {
 		let width   = self.width;
 		let height  = self.height;
 
@@ -373,7 +421,7 @@ impl Image {
 	                Rgba8(ref p)  => Rgba8(sample::filter3x3(p.as_slice(), width, height, kernel)),
 	        };
 
-		Image {
+		GenericImage {
 			pixels: pixels,
 			width:  self.width,
 			height: self.height,
@@ -384,7 +432,7 @@ impl Image {
 	/// Adjust the contrast of ```pixels```
 	/// ```contrast``` is the amount to adjust the contrast by.
 	/// Negative values decrease the constrast and positive values increase the constrast.
-	pub fn adjust_contrast(&self, c: f32) -> Image {
+	fn adjust_contrast(&self, c: f32) -> GenericImage<pixelbuf::PixelBuf> {
 		let pixels = match self.pixels {
 	                Luma8(ref p)  => Luma8(colorops::contrast(p.as_slice(), c)),
 	                LumaA8(ref p) => LumaA8(colorops::contrast(p.as_slice(), c)),
@@ -392,7 +440,7 @@ impl Image {
 	                Rgba8(ref p)  => Rgba8(colorops::contrast(p.as_slice(), c)),
         	};
 
-		Image {
+		GenericImage {
 			pixels: pixels,
 			width:  self.width,
 			height: self.height,
@@ -403,7 +451,7 @@ impl Image {
 	/// Brighten ```pixels```
 	/// ```value``` is the amount to brighten each pixel by.
 	/// Negative values decrease the brightness and positive values increase it.
-	pub fn brighten(&self, value: i32) -> Image {
+	fn brighten(&self, value: i32) -> GenericImage<pixelbuf::PixelBuf> {
 		let pixels = match self.pixels {
 	                Luma8(ref p)  => Luma8(colorops::brighten(p.as_slice(), value)),
 	                LumaA8(ref p) => LumaA8(colorops::brighten(p.as_slice(), value)),
@@ -411,7 +459,7 @@ impl Image {
 	                Rgba8(ref p)  => Rgba8(colorops::brighten(p.as_slice(), value)),
         	};
 
-		Image {
+		GenericImage {
 			pixels: pixels,
 			width:  self.width,
 			height: self.height,
@@ -420,7 +468,7 @@ impl Image {
 	}
 
 	///Flip this image vertically
-	pub fn flipv(&self) -> Image {
+	fn flipv(&self) -> GenericImage<pixelbuf::PixelBuf> {
 		let pixels = match self.pixels {
 	                Luma8(ref p)  => Luma8(affine::flip_vertical(p.as_slice(), self.width, self.height)),
 	                LumaA8(ref p) => LumaA8(affine::flip_vertical(p.as_slice(), self.width, self.height)),
@@ -428,7 +476,7 @@ impl Image {
 	                Rgba8(ref p)  => Rgba8(affine::flip_vertical(p.as_slice(), self.width, self.height)),
         	};
 
-		Image {
+		GenericImage {
 			pixels: pixels,
 			width:  self.width,
 			height: self.height,
@@ -437,7 +485,7 @@ impl Image {
 	}
 
 	///Flip this image horizontally
-	pub fn fliph(&self) -> Image {
+	fn fliph(&self) -> GenericImage<pixelbuf::PixelBuf> {
 		let pixels = match self.pixels {
 	                Luma8(ref p)  => Luma8(affine::flip_horizontal(p.as_slice(), self.width, self.height)),
 	                LumaA8(ref p) => LumaA8(affine::flip_horizontal(p.as_slice(), self.width, self.height)),
@@ -445,7 +493,7 @@ impl Image {
 	                Rgba8(ref p)  => Rgba8(affine::flip_horizontal(p.as_slice(), self.width, self.height)),
         	};
 
-		Image {
+		GenericImage {
 			pixels: pixels,
 			width:  self.width,
 			height: self.height,
@@ -454,7 +502,7 @@ impl Image {
 	}
 
 	///Rotate this image 90 degrees clockwise.
-	pub fn rotate90(&self) -> Image {
+	fn rotate90(&self) -> GenericImage<pixelbuf::PixelBuf> {
 		let pixels = match self.pixels {
 	                Luma8(ref p)  => Luma8(affine::rotate90(p.as_slice(), self.width, self.height)),
 	                LumaA8(ref p) => LumaA8(affine::rotate90(p.as_slice(), self.width, self.height)),
@@ -462,7 +510,7 @@ impl Image {
 	                Rgba8(ref p)  => Rgba8(affine::rotate90(p.as_slice(), self.width, self.height)),
         	};
 
-		Image {
+		GenericImage {
 			pixels: pixels,
 			width:  self.width,
 			height: self.height,
@@ -471,7 +519,7 @@ impl Image {
 	}
 
 	///Rotate this image 180 degrees clockwise.
-	pub fn rotate180(&self) -> Image {
+	fn rotate180(&self) -> GenericImage<pixelbuf::PixelBuf> {
 		let pixels = match self.pixels {
 	                Luma8(ref p)  => Luma8(affine::rotate180(p.as_slice(), self.width, self.height)),
 	                LumaA8(ref p) => LumaA8(affine::rotate180(p.as_slice(), self.width, self.height)),
@@ -479,7 +527,7 @@ impl Image {
 	                Rgba8(ref p)  => Rgba8(affine::rotate180(p.as_slice(), self.width, self.height)),
         	};
 
-		Image {
+		GenericImage {
 			pixels: pixels,
 			width:  self.width,
 			height: self.height,
@@ -488,7 +536,7 @@ impl Image {
 	}
 
 	///Rotate this image 270 degrees clockwise.
-	pub fn rotate270(&self) -> Image {
+	fn rotate270(&self) -> GenericImage<pixelbuf::PixelBuf> {
 		let pixels = match self.pixels {
 	                Luma8(ref p)  => Luma8(affine::rotate270(p.as_slice(), self.width, self.height)),
 	                LumaA8(ref p) => LumaA8(affine::rotate270(p.as_slice(), self.width, self.height)),
@@ -496,7 +544,77 @@ impl Image {
 	                Rgba8(ref p)  => Rgba8(affine::rotate270(p.as_slice(), self.width, self.height)),
         	};
 
-		Image {
+		GenericImage {
+			pixels: pixels,
+			width:  self.width,
+			height: self.height,
+			color:  self.color
+		}
+	}
+}
+
+impl<T: Primitive, P: Pixel<T> + Default + Clone + Copy> ImageOps for GenericImage<Vec<P>> {
+	/// Returns a tuple of the image's width and height.
+	fn dimensions(&self) -> (u32, u32) {
+		(self.width, self.height)
+	}
+
+	/// The colortype of this image.
+	fn colortype(&self) -> ColorType {
+		self.color
+	}
+
+	/// Invert the colors of this image.
+	/// This method operates inplace.
+	fn invert(&mut self) {
+		colorops::invert(self.pixels.as_mut_slice());
+	}
+
+	/// Resize this image using the specified filter algorithm.
+	/// Returns a new image. The image's aspect ratio is preserved.
+	///```nwidth``` and ```nheight``` are the new image's dimensions
+	fn resize(&self, nwidth: u32, nheight: u32, filter: sample::FilterType) -> GenericImage<Vec<P>> {
+		let ratio  = self.width as f32 / self.height as f32;
+		let nratio = nwidth as f32 / nheight as f32;
+
+		let scale = if nratio > ratio {
+			nheight as f32 / self.height as f32
+		} else {
+			nwidth as f32 / self.width as f32
+		};
+
+		let width2  = (self.width as f32 * scale) as u32;
+		let height2 = (self.height as f32 * scale) as u32;
+
+		self.resize_exact(width2, height2, filter)
+	}
+
+	/// Resize this image using the specified filter algorithm.
+	/// Returns a new image. Does not preserve aspect ratio.
+	///```nwidth``` and ```nheight``` are the new image's dimensions
+	fn resize_exact(&self, nwidth: u32, nheight: u32, filter: sample::FilterType) -> GenericImage<Vec<P>> {
+		let width   = self.width;
+		let height  = self.height;
+
+		let pixels = sample::resize(self.pixels.as_slice(), width, height, nwidth, nheight, filter);
+
+		GenericImage {
+			pixels: pixels,
+			width:  nwidth,
+			height: nheight,
+			color:  self.color
+		}
+	}
+
+	/// Perfomrs a Gausian blur on this image.
+	/// ```sigma``` is a meausure of how much to blur by.
+	fn blur(&self, sigma: f32) -> GenericImage<Vec<P>> {
+		let width   = self.width;
+		let height  = self.height;
+
+		let pixels = sample::blur(self.pixels.as_slice(), width, height, sigma);
+
+		GenericImage {
 			pixels: pixels,
 			width:  self.width,
 			height: self.height,
@@ -504,154 +622,137 @@ impl Image {
 		}
 	}
 
-	/// Return an immutable view into this image
-	pub fn crop<'a>(&'a self, x: u32, y: u32, width: u32, height: u32) -> SubImage<'a> {
-		let x = cmp::min(x, self.width);
-		let y = cmp::min(y, self.height);
+	/// Performs an unsharpen mask on ```pixels```
+	/// ```sigma``` is the amount to blur the image by.
+	/// ```threshold``` is a control of how much to sharpen.
+	/// see https://en.wikipedia.org/wiki/Unsharp_masking#Digital_unsharp_masking
+	fn unsharpen(&self, sigma: f32, threshold: i32) -> GenericImage<Vec<P>> {
+		let width   = self.width;
+		let height  = self.height;
 
-		let height = cmp::min(height, self.height - y);
-		let width  = cmp::min(width, self.width - x);
+		let pixels = sample::unsharpen(self.pixels.as_slice(), width, height, sigma, threshold);
 
-		SubImage {
-			pixels:  &self.pixels,
-			color:   self.color,
-			xoffset: x,
-			yoffset: y,
-			width:   width,
-			height:  height,
-			vstride: self.width,
-		}
-	}
-
-	/// An iterator over rectangles in this image.
-	/// ```xstride``` and ```ystride``` are the length and width of each rectangle.
-	/// If the image's dimensions are not a multiple of stride
-	/// The subimage will be truncated.
-	pub fn tiles<'a>(&'a self, xstride: u32, ystride: u32) -> Tiles<'a> {
-		Tiles {
-			image: self,
-			x: 0,
-			y: 0,
-			xstride: xstride,
-			ystride: ystride,
-		}
-	}
-}
-
-/// An immutable view into another image.
-pub struct SubImage<'a> {
-	pixels:   &'a pixelbuf::PixelBuf,
-	color:    ColorType,
-	xoffset:  u32,
-	yoffset:  u32,
-	width:    u32,
-	height:   u32,
-	vstride:  u32,
-}
-
-impl<'a> SubImage<'a> {
-	/// Return the width and height of this subimage
-	pub fn dimensions(&self) -> (u32, u32) {
-		(self.width, self.height)
-	}
-
-	/// Convert this Subimage to an Image
-	pub fn to_image(&self) -> Image {
-		let pixels = match *self.pixels {
-			Luma8(ref p)  => Luma8(subimage_to_image(p.as_slice(), self.xoffset, self.yoffset, self.width, self.height, self.vstride)),
-	                LumaA8(ref p) => LumaA8(subimage_to_image(p.as_slice(), self.xoffset, self.yoffset, self.width, self.height, self.vstride)),
-	                Rgb8(ref p)   => Rgb8(subimage_to_image(p.as_slice(), self.xoffset, self.yoffset, self.width, self.height, self.vstride)),
-	                Rgba8(ref p)  => Rgba8(subimage_to_image(p.as_slice(), self.xoffset, self.yoffset, self.width, self.height, self.vstride)),
-        	};
-
-		Image {
+	    	GenericImage {
 			pixels: pixels,
-			color:  self.color,
 			width:  self.width,
 			height: self.height,
+			color:  self.color
 		}
 	}
 
-	/// Return an immutable view into this SubImage
-	pub fn crop(&self, x: u32, y: u32, width: u32, height: u32) -> SubImage<'a> {
-		let x = cmp::min(x, self.width);
-		let y = cmp::min(y, self.height);
+	/// Filters this image with the specified 3x3 kernel.
+	fn filter3x3(&self, kernel: &[f32]) -> GenericImage<Vec<P>> {
+		let width   = self.width;
+		let height  = self.height;
 
-		let height = cmp::min(height, self.height - y);
-		let width  = cmp::min(width, self.width - x);
+		if kernel.len() != 9 {
+                	return self.clone()
+        	}
 
-		SubImage {
-			pixels:  self.pixels,
-			color:   self.color,
-			xoffset: self.xoffset + x,
-			yoffset: self.yoffset + y,
-			width:   width,
-			height:  height,
-			vstride: self.vstride,
+		let pixels = sample::filter3x3(self.pixels.as_slice(), width, height, kernel);
+
+		GenericImage {
+			pixels: pixels,
+			width:  self.width,
+			height: self.height,
+			color:  self.color
+		}
+	}
+
+	/// Adjust the contrast of ```pixels```
+	/// ```contrast``` is the amount to adjust the contrast by.
+	/// Negative values decrease the constrast and positive values increase the constrast.
+	fn adjust_contrast(&self, c: f32) -> GenericImage<Vec<P>> {
+		let pixels = colorops::contrast(self.pixels.as_slice(), c);
+
+		GenericImage {
+			pixels: pixels,
+			width:  self.width,
+			height: self.height,
+			color:  self.color
+		}
+	}
+
+	/// Brighten ```pixels```
+	/// ```value``` is the amount to brighten each pixel by.
+	/// Negative values decrease the brightness and positive values increase it.
+	fn brighten(&self, value: i32) -> GenericImage<Vec<P>> {
+		let pixels = colorops::brighten(self.pixels.as_slice(), value);
+
+		GenericImage {
+			pixels: pixels,
+			width:  self.width,
+			height: self.height,
+			color:  self.color
+		}
+	}
+
+	///Flip this image vertically
+	fn flipv(&self) -> GenericImage<Vec<P>> {
+		let pixels = affine::flip_vertical(self.pixels.as_slice(), self.width, self.height);
+
+		GenericImage {
+			pixels: pixels,
+			width:  self.width,
+			height: self.height,
+			color:  self.color
+		}
+	}
+
+	///Flip this image horizontally
+	fn fliph(&self) -> GenericImage<Vec<P>> {
+		let pixels = affine::flip_horizontal(self.pixels.as_slice(), self.width, self.height);
+		GenericImage {
+			pixels: pixels,
+			width:  self.width,
+			height: self.height,
+			color:  self.color
+		}
+	}
+
+	///Rotate this image 90 degrees clockwise.
+	fn rotate90(&self) -> GenericImage<Vec<P>> {
+		let pixels = affine::rotate90(self.pixels.as_slice(), self.width, self.height);
+
+		GenericImage {
+			pixels: pixels,
+			width:  self.width,
+			height: self.height,
+			color:  self.color
+		}
+	}
+
+	///Rotate this image 180 degrees clockwise.
+	fn rotate180(&self) -> GenericImage<Vec<P>> {
+		let pixels = affine::rotate180(self.pixels.as_slice(), self.width, self.height);
+
+		GenericImage {
+			pixels: pixels,
+			width:  self.width,
+			height: self.height,
+			color:  self.color
+		}
+	}
+
+	///Rotate this image 270 degrees clockwise.
+	fn rotate270(&self) -> GenericImage<Vec<P>> {
+		let pixels = affine::rotate270(self.pixels.as_slice(), self.width, self.height);
+
+		GenericImage {
+			pixels: pixels,
+			width:  self.width,
+			height: self.height,
+			color:  self.color
 		}
 	}
 }
 
-///An iterator over nonoverlapping rectangles within an image.
-pub struct Tiles<'a> {
-	image:   &'a Image,
-	y:       u32,
-	x:       u32,
-	xstride: u32,
-	ystride: u32,
-}
+///An Image that can hold any pixel type
+pub type Image     = GenericImage<pixelbuf::PixelBuf>;
+pub type RGB8Image = GenericImage<Vec<pixel::Rgb<u8>>>;
+pub type RawImage  = GenericImage<Vec<u8>>;
 
-impl<'a> Iterator<SubImage<'a>> for Tiles<'a> {
-	fn next(&mut self) -> Option<SubImage<'a>> {
-		let (width, height) = self.image.dimensions();
-
-		if self.x > width {
-			self.x = 0;
-			self.y += self.ystride;
-		}
-
-		if self.y > height {
-			None
-		} else {
-			let sub = self.image.crop(self.x,
-						  self.y,
-						  self.xstride,
-						  self.ystride);
-			self.x += self.xstride;
-
-			Some(sub)
-		}
-	}
-}
-
-fn subimage_to_image<T: Primitive, P: Pixel<T> + Clone + Copy + Default>(
-	src:    &[P],
-	x0:     u32,
-	y0:     u32,
-	width:  u32,
-	height: u32,
-	stride: u32) -> Vec<P> {
-
-	let x0     = x0 as uint;
-	let y0     = y0 as uint;
-	let width  = width as uint;
-	let height = height as uint;
-	let stride = stride as uint;
-
-	let d: P = Default::default();
-	let mut dest = Vec::from_elem(width * height, d.clone());
-
-	for y in range(0, height) {
-		for x in range(0, width) {
-			let p = src[(y0 + y) * stride + x0 + x];
-			dest.as_mut_slice()[y * width + x] = p;
-		}
-	}
-
-	dest
-}
-
-fn decoder_to_image<I: ImageDecoder>(codec: I) -> ImageResult<Image> {
+fn decoder_to_image<I: ImageDecoder>(codec: I) -> ImageResult<GenericImage<pixelbuf::PixelBuf>> {
 	let mut codec = codec;
 
 	let color  = try!(codec.colortype());
@@ -663,7 +764,7 @@ fn decoder_to_image<I: ImageDecoder>(codec: I) -> ImageResult<Image> {
 		_     => return Err(UnsupportedColor)
 	};
 
-	let im = Image {
+	let im = GenericImage {
 		pixels:  pixels,
 		width:   w,
 		height:  h,
