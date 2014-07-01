@@ -648,8 +648,7 @@ fn clamp(a: i32) -> u8 {
 //Section F.2.2.1
 //Figure F.12
 fn extend(v: i32, t: u8) -> i32 {
-	let vt = 1 << t as uint - 1;
-	let vt = vt as i32;
+	let vt: i32 = 1 << t as uint - 1;
 
 	if v < vt {
 		v + ((-1) << t as uint) + 1

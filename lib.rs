@@ -5,7 +5,7 @@
 #![crate_id = "image"]
 #![crate_type = "rlib"]
 
-#![deny(missing_doc)]
+#![warn(missing_doc)]
 #![warn(unnecessary_qualification)]
 #![warn(unnecessary_typecast)]
 #![feature(macro_rules)]
@@ -41,10 +41,6 @@ pub use image::{
         PPM
 };
 
-pub use ImageOps = image::ImageOps;
-pub use RGB8Image = image::RGB8Image;
-pub use RawImage  = image::RawImage;
-pub use Image = image::Image;
 pub use GenericImage = image::GenericImage;
 
 //pub use JPEGDecoder = codecs::jpeg::JPEGDecoder;
@@ -90,4 +86,4 @@ pub mod imaging {
         pub mod affine;
 }
 
-mod image;
+pub mod image;

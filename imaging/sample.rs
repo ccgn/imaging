@@ -11,6 +11,7 @@ use std::num::{
 use std::default::Default;
 
 use imaging::pixel::Pixel;
+use image::GenericImage;
 
 /// Available Sampling Filters
 pub enum FilterType {
@@ -137,28 +138,86 @@ fn clamp<N: Num + PartialOrd>(a: N, min: N, max: N) -> N {
 // ```height``` is the current height of ```pixels```.
 // ```nwidth``` is the desired width of ```pixels```
 // ```method``` is the filter to use for sampling.
-fn horizontal_sample<P: Primitive, T: Pixel<P> + Default + Clone>(
-	pixels: &[T],
-	width:  u32,
-	height: u32,
-	nwidth: u32,
-	method: &mut Filter) -> Vec<T> {
+fn horizontal_sample<P: Primitive, T: Pixel<P> + Default + Clone, I: GenericImage<T>>(
+	image:     &I,
+	new_width: u32,
+	filter:    &mut Filter) -> I {
 
-	let d: T = Default::default();
+        let (width, height) = image.dimensions();
 
-	let mut vec = Vec::from_elem(nwidth as uint * height as uint, d.clone());
+        let d: T = Default::default();
+        let mut out: I = GenericImage::from_pixel(new_width, height, d);
 
-	for y in range(0, height as uint) {
-		let inr = pixels.slice_from(y * width as uint)
-				.slice_to(width as uint);
+	for y in range(0, height) {
+		let max: P = Bounded::max_value();
+                let max = cast::<P, f32>(max).unwrap();
 
-		let outr = vec.mut_slice_from(y * nwidth as uint)
-			      .mut_slice_to(nwidth as uint);
+                let ratio = width as f32 / new_width as f32;
 
-		convolve1d(inr, outr, width, nwidth, method, 1);
-	}
+                //Scale the filter when downsampling.
+                let filter_scale = if ratio > 1.0 {
+                        ratio
+                } else {
+                        1.0
+                };
 
-	vec
+                let filter_radius = (filter.support * filter_scale).ceil();
+
+                for outx in range(0, new_width) {
+                        let inputx = (outx as f32 + 0.5) * ratio;
+
+                        let left  = (inputx - filter_radius).ceil() as u32;
+                        let left  = clamp(left, 0, width - 1);
+
+                        let right = (inputx + filter_radius).floor() as u32;
+                        let right = clamp(right, 0, width - 1);
+
+                        let tmp: T = Default::default();
+
+                        let mut sum = 0.0;
+
+                        let mut t1 = 0.0;
+                        let mut t2 = 0.0;
+                        let mut t3 = 0.0;
+                        let mut t4 = 0.0;
+
+                        for i in range(left, right + 1) {
+                                let w = (filter.kernel)((i as f32 - inputx) / filter_scale);
+                                sum += w;
+
+                                let x0  = clamp(i, 0, width - 1);
+                                let p = image.get_pixel(x0, y);
+
+                                let (k1, k2, k3, k4) = p.channels4();
+                                let (a, b, c, d) = (cast::<P, f32>(k1).unwrap(),
+                                                    cast::<P, f32>(k2).unwrap(),
+                                                    cast::<P, f32>(k3).unwrap(),
+                                                    cast::<P, f32>(k4).unwrap());
+
+                                let (a1, b1, c1, d1) = ( a  * w,  b * w,   c * w,   d * w);
+                                let (a2, b2, c2, d2) = (a1 + t1, b1 + t2, c1 + t3, d1 + t4);
+
+                                t1 = a2;
+                                t2 = b2;
+                                t3 = c2;
+                                t4 = d2;
+                        }
+
+                        t1 /= sum;
+                        t2 /= sum;
+                        t3 /= sum;
+                        t4 /= sum;
+
+                        let t = tmp.from_channels(cast::<f32, P>(clamp(t1, 0.0, max)).unwrap(),
+                                                  cast::<f32, P>(clamp(t2, 0.0, max)).unwrap(),
+                                                  cast::<f32, P>(clamp(t3, 0.0, max)).unwrap(),
+                                                  cast::<f32, P>(clamp(t4, 0.0, max)).unwrap());
+
+                        out.put_pixel(outx, y, t);
+        	}
+        }
+
+        out
 }
 
 // Sample the columns of ```pixels`` using the provided filter.
@@ -167,128 +226,107 @@ fn horizontal_sample<P: Primitive, T: Pixel<P> + Default + Clone>(
 // ```height``` is the current height of ```pixels```.
 // ```nheight``` is the desired height of ```pixels```
 // ```method``` is the filter to use for sampling.
-fn vertical_sample<P: Primitive, T: Pixel<P> + Default + Clone>(
-	pixels:  &[T],
-	height:  u32,
-	width:   u32,
-	nheight: u32,
-	method:  &mut Filter) -> Vec<T> {
+fn vertical_sample<P: Primitive, T: Pixel<P> + Default + Clone, I: GenericImage<T>>(
+	image:      &I,
+	new_height: u32,
+	filter:     &mut Filter) -> I {
 
-	let d: T = Default::default();
+	let (width, height) = image.dimensions();
 
-	let mut vec = Vec::from_elem(width as uint * nheight as uint, d.clone());
+        let d: T = Default::default();
+        let mut out: I = GenericImage::from_pixel(width, new_height, d);
 
-	for x in range(0, width as uint) {
-		let inc  = pixels.slice_from(x);
+        for x in range(0, width) {
+                let max: P = Bounded::max_value();
+                let max = cast::<P, f32>(max).unwrap();
 
-		let outc = vec.as_mut_slice()
-			      .mut_slice_from(x);
+                let ratio = height as f32 / new_height as f32;
 
-		convolve1d(inc, outc, height, nheight, method, width as uint);
-	}
+                //Scale the filter when downsampling.
+                let filter_scale = if ratio > 1.0 {
+                        ratio
+                } else {
+                        1.0
+                };
 
-	vec
-}
+                let filter_radius = (filter.support * filter_scale).ceil();
 
-//Performs a 1 - dimensional convultion of ```inrow`` using the Filter
-//``filter`` and store the result in ```outrow```
-fn convolve1d<P: Primitive, T: Pixel<P> + Default>(
-	inrow:  &[T],
-	outrow: &mut [T],
-	inlen:  u32,
-	outlen: u32,
-	filter: &mut Filter,
-	stride: uint) {
+                for outy in range(0, new_height) {
+                        let inputy = (outy as f32 + 0.5) * ratio;
 
-	let max: P = Bounded::max_value();
-	let max = cast::<P, f32>(max).unwrap();
+                        let left  = (inputy - filter_radius).ceil() as u32;
+                        let left  = clamp(left, 0, height - 1);
 
-	let ratio = inlen as f32 / outlen as f32;
+                        let right = (inputy + filter_radius).floor() as u32;
+                        let right = clamp(right, 0, height - 1);
 
-	//Scale the filter when downsampling.
-	let filter_scale = if ratio > 1.0 {
-		ratio
-	} else {
-		1.0
-	};
+                        let tmp: T = Default::default();
 
-	let filter_radius = (filter.support * filter_scale).ceil();
+                        let mut sum = 0.0;
 
-	//TODO: Precalculate the filter weights once per row and column
-	for outx in range(0, outlen as uint) {
-		let inputx = (outx as f32 + 0.5) * ratio;
+                        let mut t1 = 0.0;
+                        let mut t2 = 0.0;
+                        let mut t3 = 0.0;
+                        let mut t4 = 0.0;
 
-		let left  = (inputx - filter_radius).ceil() as int;
-		let left  = clamp(left, 0, inrow.len() as int - 1) as uint;
+                        for i in range(left, right + 1) {
+                                let w = (filter.kernel)((i as f32 - inputy) / filter_scale);
+                                sum += w;
 
-		let right = (inputx + filter_radius).floor() as int;
-		let right = clamp(right, 0, inrow.len() as int - 1) as uint;
+                                let y0  = clamp(i, 0, width - 1);
+                                let p = image.get_pixel(x, y0);
 
-		let tmp: T = Default::default();
+                                let (k1, k2, k3, k4) = p.channels4();
+                                let (a, b, c, d) = (cast::<P, f32>(k1).unwrap(),
+                                                    cast::<P, f32>(k2).unwrap(),
+                                                    cast::<P, f32>(k3).unwrap(),
+                                                    cast::<P, f32>(k4).unwrap());
 
-		let mut sum = 0.0;
+                                let (a1, b1, c1, d1) = ( a  * w,  b * w,   c * w,   d * w);
+                                let (a2, b2, c2, d2) = (a1 + t1, b1 + t2, c1 + t3, d1 + t4);
 
-		let mut t1 = 0.0;
-		let mut t2 = 0.0;
-		let mut t3 = 0.0;
-		let mut t4 = 0.0;
+                                t1 = a2;
+                                t2 = b2;
+                                t3 = c2;
+                                t4 = d2;
+                        }
 
-		for i in range(left, right + 1) {
-			let w = (filter.kernel)((i as f32 - inputx) / filter_scale);
-			sum += w;
+                        t1 /= sum;
+                        t2 /= sum;
+                        t3 /= sum;
+                        t4 /= sum;
 
-			let (k1, k2, k3, k4) = inrow[clamp(i * stride, 0, inrow.len() - 1)].channels4();
-			let (a, b, c, d) = (cast::<P, f32>(k1).unwrap(),
-					    cast::<P, f32>(k2).unwrap(),
-					    cast::<P, f32>(k3).unwrap(),
-					    cast::<P, f32>(k4).unwrap());
+                        let t = tmp.from_channels(cast::<f32, P>(clamp(t1, 0.0, max)).unwrap(),
+                                                  cast::<f32, P>(clamp(t2, 0.0, max)).unwrap(),
+                                                  cast::<f32, P>(clamp(t3, 0.0, max)).unwrap(),
+                                                  cast::<f32, P>(clamp(t4, 0.0, max)).unwrap());
 
-			let (a1, b1, c1, d1) = ( a  * w,  b * w,   c * w,   d * w);
-			let (a2, b2, c2, d2) = (a1 + t1, b1 + t2, c1 + t3, d1 + t4);
+                        out.put_pixel(x, outy, t);
+                }
+        }
 
-			t1 = a2;
-			t2 = b2;
-			t3 = c2;
-			t4 = d2;
-		}
-
-		t1 /= sum;
-		t2 /= sum;
-		t3 /= sum;
-		t4 /= sum;
-
-		outrow[outx * stride] = tmp.from_channels(cast::<f32, P>(clamp(t1, 0.0, max)).unwrap(),
-						 	  cast::<f32, P>(clamp(t2, 0.0, max)).unwrap(),
-							  cast::<f32, P>(clamp(t3, 0.0, max)).unwrap(),
-							  cast::<f32, P>(clamp(t4, 0.0, max)).unwrap());
-	}
+        out
 }
 
 /// Perform a 3x3 box filter on ```pixels```.
 /// ```width``` is the width of pixels.
 /// ```height``` is the height of pixels.
 /// ```kernel``` is an array of the filter weights of length 9.
-pub fn filter3x3<P: Primitive, T: Pixel<P> + Default + Clone>(
-	pixels: &[T],
-	width:  u32,
-	height: u32,
-	kernel: &[f32]) -> Vec<T> {
+pub fn filter3x3<P: Primitive, T: Pixel<P> + Default + Clone + Copy, I: GenericImage<T>>(
+	image:  &I,
+	kernel: &[f32]) -> I {
 
 	// The kernel's input positions relative to the current pixel.
-	let taps = [
-		-(width as i64 - 1),
-		-(width as i64),
-		-(width as i64 + 1),
-        	-1,
-        	0,
-        	1,
-        	width as i64 - 1,
-        	width as i64,
-        	width as i64 + 1
+	let taps: &[(int, int)] = [
+                (-1, -1), ( 0, -1), ( 1, -1),
+                (-1,  0), ( 0,  0), ( 1,  0),
+                (-1,  1), ( 0,  1), ( 1,  1),
         ];
 
+        let (width, height) = image.dimensions();
+
         let d: T = Default::default();
-	let mut out = Vec::from_elem(width as uint * height as uint, d.clone());
+        let mut out: I = GenericImage::from_pixel(width, height, d);
 
         let max: P = Bounded::max_value();
 	let max = cast::<P, f32>(max).unwrap();
@@ -297,10 +335,8 @@ pub fn filter3x3<P: Primitive, T: Pixel<P> + Default + Clone>(
 	let sum = if sum == 0.0 { 1.0 }
 		  else { sum };
 
-	for y in range(1, height as uint - 1) {
-		for x in range(1, width as uint - 1) {
-			let index = (y * width as uint) + x;
-
+	for y in range(1, height - 1) {
+		for x in range(1, width - 1) {
 			let mut t1 = 0.0;
 			let mut t2 = 0.0;
 			let mut t3 = 0.0;
@@ -309,8 +345,11 @@ pub fn filter3x3<P: Primitive, T: Pixel<P> + Default + Clone>(
 			//TODO: There is no need to recalculate the kernel for each pixel.
 			//Only a subtract and addition is needed for pixels after the first
 			//in each row.
-			for (&k, &tap) in kernel.iter().zip(taps.iter()) {
-				let p = pixels[(index as i64 + tap) as uint].clone();
+			for (&k, &(a, b)) in kernel.iter().zip(taps.iter()) {
+                                let x0 = x as int + a as int;
+                                let y0 = y as int + b as int;
+
+				let p = image.get_pixel(x0 as u32, y0 as u32);
 
 				let (k1, k2, k3, k4) = p.channels4();
 
@@ -334,11 +373,13 @@ pub fn filter3x3<P: Primitive, T: Pixel<P> + Default + Clone>(
 
 			let tmp: T = Default::default();
 
-			out.as_mut_slice()[index] = tmp.from_channels(cast::<f32, P>(clamp(t1, 0.0, max)).unwrap(),
-							              cast::<f32, P>(clamp(t2, 0.0, max)).unwrap(),
-							              cast::<f32, P>(clamp(t3, 0.0, max)).unwrap(),
-							              cast::<f32, P>(clamp(t4, 0.0, max)).unwrap());
-		}
+			let t = tmp.from_channels(cast::<f32, P>(clamp(t1, 0.0, max)).unwrap(),
+						  cast::<f32, P>(clamp(t2, 0.0, max)).unwrap(),
+						  cast::<f32, P>(clamp(t3, 0.0, max)).unwrap(),
+						  cast::<f32, P>(clamp(t4, 0.0, max)).unwrap());
+
+                        out.put_pixel(x, y, t);
+                }
 	}
 
 	out
@@ -348,13 +389,13 @@ pub fn filter3x3<P: Primitive, T: Pixel<P> + Default + Clone>(
 /// ```width``` and ```height``` are the original dimensions.
 /// ```nwidth``` and ```nheight``` are the new dimensions.
 /// ```filter``` is the sampling filter to use.
-pub fn resize<A: Primitive, T: Pixel<A> + Default + Clone>(
-	pixels:  &[T],
+pub fn resize<A: Primitive, T: Pixel<A> + Default + Clone, I: GenericImage<T>>(
+	image:   &I,
 	width:   u32,
 	height:  u32,
 	nwidth:  u32,
 	nheight: u32,
-	filter:  FilterType) -> Vec<T> {
+	filter:  FilterType) -> I {
 
         let mut method = match filter {
                 Nearest    =>   Filter {
@@ -379,19 +420,17 @@ pub fn resize<A: Primitive, T: Pixel<A> + Default + Clone>(
                 },
         };
 
-        let tmp = vertical_sample(pixels, height, width, nheight, &mut method);
+        let tmp = vertical_sample(image, nheight, &mut method);
 
-	horizontal_sample(tmp.as_slice(), width, nheight, nwidth, &mut method)
+	horizontal_sample(&tmp, nwidth, &mut method)
 }
 
 /// Perfomrs a Gausian blur on ```pixels```
 /// ```width``` and ```height``` are the dimensions of the buffer.
 /// ```sigma``` is a meausure of how much to blur by.
-pub fn blur<A: Primitive, T: Pixel<A> + Default + Clone>(
-	pixels:  &[T],
-	width:   u32,
-        height:  u32,
-        sigma:   f32) -> Vec<T> {
+pub fn blur<A: Primitive, T: Pixel<A> + Default + Clone, I: GenericImage<T>>(
+        image:  &I,
+        sigma:  f32) -> I {
 
         let sigma = if sigma < 0.0 {
                 1.0
@@ -404,45 +443,51 @@ pub fn blur<A: Primitive, T: Pixel<A> + Default + Clone>(
                 support: 2.0 * sigma
         };
 
+        let (width, height) = image.dimensions();
+
         // Keep width and height the same for horizontal and
         // vertical sampling.
-        let tmp = vertical_sample(pixels, height, width, height, &mut method);
+        let tmp = vertical_sample(image, height, &mut method);
 
-        horizontal_sample(tmp.as_slice(), width, height, width, &mut method)
+        horizontal_sample(&tmp, width, &mut method)
 }
 
 /// Performs an unsharpen mask on ```pixels```
 /// ```sigma``` is the amount to blur the image by.
 /// ```threshold``` is the threshold for the difference between
 /// see https://en.wikipedia.org/wiki/Unsharp_masking#Digital_unsharp_masking
-pub fn unsharpen<A: Primitive, T: Pixel<A> + Clone + Default>(
-	pixels:    &[T],
-	width:     u32,
-	height:    u32,
+pub fn unsharpen<A: Primitive, T: Pixel<A> + Clone + Copy + Default, I: GenericImage<T>>(
+	image:     &I,
 	sigma:     f32,
-	threshold: i32) -> Vec<T> {
+	threshold: i32) -> I {
 
-	let mut tmp = blur(pixels, width, height, sigma);
+	let mut tmp = blur(image, sigma);
 
         let max: A = Bounded::max_value();
+        let (width, height) = image.dimensions();
 
-        for (p, b) in pixels.iter().zip(tmp.mut_iter()) {
-                let a = p.map2(b.clone(), |c, d| {
-                        let ic = cast::<A, i32>(c).unwrap();
-                        let id = cast::<A, i32>(d).unwrap();
+        for y in range(0, height) {
+                for x in range(0, width) {
+                        let a = image.get_pixel(x, y);
+                        let b = tmp.get_pixel(x, y);
 
-                        let diff = (ic - id).abs();
+                        let p = a.map2(b, |c, d| {
+                                    let ic = cast::<A, i32>(c).unwrap();
+                                    let id = cast::<A, i32>(d).unwrap();
 
-                        if diff > threshold {
-                                let e = clamp(ic + diff, 0, cast::<A, i32>(max).unwrap());
+                                    let diff = (ic - id).abs();
 
-                                cast::<i32, A>(e).unwrap()
-                        } else {
-                                c
-                        }
-                });
+                                    if diff > threshold {
+                                            let e = clamp(ic + diff, 0, cast::<A, i32>(max).unwrap());
 
-                *b = a;
+                                            cast::<i32, A>(e).unwrap()
+                                    } else {
+                                            c
+                                    }
+                        });
+
+                        tmp.put_pixel(x, y, p);
+                }
         }
 
         tmp
