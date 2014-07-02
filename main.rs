@@ -21,6 +21,6 @@ fn main() {
 	let t = im.clone();
 	spawn(proc() {
 		let fout = File::create(&Path::new(format!("{}.png", os::args().as_slice()[1]))).unwrap();
-		let _    = t.save(fout, PNG);
+		let _    = t.resize(1200, 1200, image::CatmullRom).save(fout, PNG);
 	});
 }

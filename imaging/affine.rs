@@ -7,9 +7,7 @@ use image::GenericImage;
 
 ///Rotate ```pixels``` 90 degrees clockwise.
 pub fn rotate90<P: Primitive, T: Pixel<P> + Default + Clone + Copy, I: GenericImage<T>>(
-        image:  &I,
-        width:  u32,
-        height: u32) -> I {
+        image:  &I) -> I {
 
         let (width, height) = image.dimensions();
 
@@ -28,9 +26,7 @@ pub fn rotate90<P: Primitive, T: Pixel<P> + Default + Clone + Copy, I: GenericIm
 
 ///Rotate ```pixels``` 180 degrees clockwise.
 pub fn rotate180<P: Primitive, T: Pixel<P> + Default + Copy + Clone, I: GenericImage<T>>(
-        image:  &I,
-        width:  u32,
-        height: u32) -> I {
+        image:  &I) -> I {
 
         let (width, height) = image.dimensions();
 
@@ -49,9 +45,7 @@ pub fn rotate180<P: Primitive, T: Pixel<P> + Default + Copy + Clone, I: GenericI
 
 ///Rotate ```pixels``` 270 degrees clockwise.
 pub fn rotate270<P: Primitive, T: Pixel<P> + Default + Copy + Clone, I: GenericImage<T>>(
-        image:  &I,
-        width:  u32,
-        height: u32) -> I {
+        image:  &I) -> I {
 
         let (width, height) = image.dimensions();
 
@@ -70,9 +64,7 @@ pub fn rotate270<P: Primitive, T: Pixel<P> + Default + Copy + Clone, I: GenericI
 
 ///Flip ```pixels``` horizontally
 pub fn flip_horizontal<P: Primitive, T: Pixel<P> + Default + Copy + Clone, I: GenericImage<T>>(
-        image:  &I,
-        width:  u32,
-        height: u32) -> I {
+        image:  &I) -> I {
 
         let (width, height) = image.dimensions();
 
@@ -91,9 +83,7 @@ pub fn flip_horizontal<P: Primitive, T: Pixel<P> + Default + Copy + Clone, I: Ge
 
 ///Flip ```pixels``` vertically
 pub fn flip_vertical<P: Primitive, T: Pixel<P> + Default + Copy + Clone, I: GenericImage<T>>(
-        image:  &I,
-        width:  u32,
-        height: u32) -> I {
+        image:  &I) -> I {
 
         let (width, height) = image.dimensions();
 

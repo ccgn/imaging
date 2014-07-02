@@ -391,8 +391,6 @@ pub fn filter3x3<P: Primitive, T: Pixel<P> + Default + Clone + Copy, I: GenericI
 /// ```filter``` is the sampling filter to use.
 pub fn resize<A: Primitive, T: Pixel<A> + Default + Clone, I: GenericImage<T>>(
 	image:   &I,
-	width:   u32,
-	height:  u32,
 	nwidth:  u32,
 	nheight: u32,
 	filter:  FilterType) -> I {
