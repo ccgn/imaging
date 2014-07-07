@@ -11,6 +11,7 @@ use imaging::pixel::{
 
 use std::default::Default;
 use image::GenericImage;
+use image::ImageBuf;
 
 fn clamp<N: Num + PartialOrd>(a: N, min: N, max: N) -> N {
         if a > max { max }
@@ -19,13 +20,13 @@ fn clamp<N: Num + PartialOrd>(a: N, min: N, max: N) -> N {
 }
 
 /// Convert ```pixels``` to grayscale
-pub fn grayscale<P: Primitive + Default, T: Pixel<P> + Default + Copy + Clone, I: GenericImage<T>, J: GenericImage<Luma<P>>>(
-        image: &I) -> J {
+pub fn grayscale<P: Primitive + Default, T: Pixel<P> + Default + Copy + Clone, I: GenericImage<T>>(
+        image: &I) -> ImageBuf<Luma<P>> {
 
         let (width, height) = image.dimensions();
 
         let d: Luma<P> = Default::default();
-        let mut out: J = GenericImage::from_pixel(width, height, d);
+        let mut out = ImageBuf::from_pixel(width, height, d);
 
         for y in range(0, height) {
                 for x in range(0, width) {
@@ -59,12 +60,12 @@ pub fn invert<P: Primitive, T: Pixel<P> + Default + Copy + Clone, I: GenericImag
 /// Negative values decrease the constrast and positive values increase the constrast.
 pub fn contrast<P: Primitive, T: Pixel<P> + Default + Copy + Clone, I: GenericImage<T>>(
         image:    &I,
-        contrast: f32) -> I {
+        contrast: f32) -> ImageBuf<T> {
 
         let (width, height) = image.dimensions();
 
         let d: T = Default::default();
-        let mut out: I = GenericImage::from_pixel(width, height, d);
+        let mut out = ImageBuf::from_pixel(width, height, d);
 
         let max: P = Bounded::max_value();
         let max = cast::<P, f32>(max).unwrap();
@@ -93,12 +94,12 @@ pub fn contrast<P: Primitive, T: Pixel<P> + Default + Copy + Clone, I: GenericIm
 /// Negative values decrease the brightness and positive values increase it.
 pub fn brighten<P: Primitive, T: Pixel<P> + Default + Copy + Clone, I: GenericImage<T>>(
         image: &I,
-        value: i32) -> I {
+        value: i32) -> ImageBuf<T> {
 
         let (width, height) = image.dimensions();
 
         let d: T = Default::default();
-        let mut out: I = GenericImage::from_pixel(width, height, d);
+        let mut out = ImageBuf::from_pixel(width, height, d);
 
         let max: P = Bounded::max_value();
         let max = cast::<P, i32>(max).unwrap();

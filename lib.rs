@@ -42,6 +42,7 @@ pub use image::{
 };
 
 pub use GenericImage = image::GenericImage;
+pub use SubImage = image::SubImage;
 
 //pub use JPEGDecoder = codecs::jpeg::JPEGDecoder;
 //pub use JPEGEncoder = codecs::jpeg::JPEGEncoder;
@@ -80,10 +81,10 @@ mod lzw;
 pub mod imaging {
         pub mod colortype;
         pub mod pixel;
+        pub mod affine;
         pub mod sample;
         pub mod colorops;
         pub mod pixelbuf;
-        pub mod affine;
 }
 
 pub mod image;
