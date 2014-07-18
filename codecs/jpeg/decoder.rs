@@ -717,7 +717,7 @@ impl HuffDecoder {
 	pub fn decode_symbol<R: Reader>(&mut self, r: &mut R, table: &HuffTable) -> ImageResult<u8> {
 		let _ = try!(self.guarantee(r, 8));
 		let index = (self.bits & 0xFF000000) >> (32 - 8);
-		let (val, size) = table.lut.as_slice()[index as uint];
+		let (val, size) = table.lut[index as uint];
 
 		if index < 256 && size < 9 {
 			self.consume(size);
@@ -731,12 +731,12 @@ impl HuffDecoder {
 				let b = try!(self.read_bit(r));
 				code |= b as uint;
 
-				if (code as int) <= table.maxcode.as_slice()[i] {
-					let index = table.valptr.as_slice()[i] +
+				if (code as int) <= table.maxcode[i] {
+					let index = table.valptr[i] +
 						    code as int -
-						    table.mincode.as_slice()[i];
+						    table.mincode[i];
 
-					return Ok(table.huffval.as_slice()[index as uint])
+					return Ok(table.huffval[index as uint])
 				}
 				code <<= 1;
 			}
@@ -759,26 +759,26 @@ fn derive_tables(bits: Vec<u8>, huffval: Vec<u8>) -> HuffTable {
 	let mut j = 0;
 
 	for i in range(0u, 16) {
-		if bits.as_slice()[i] != 0 {
+		if bits[i] != 0 {
 			valptr.as_mut_slice()[i] = j;
-			mincode.as_mut_slice()[i] = huffcode.as_slice()[j as uint] as int;
-			j += bits.as_slice()[i] as int - 1;
-			maxcode.as_mut_slice()[i] = huffcode.as_slice()[j as uint] as int;
+			mincode.as_mut_slice()[i] = huffcode[j as uint] as int;
+			j += bits[i] as int - 1;
+			maxcode.as_mut_slice()[i] = huffcode[j as uint] as int;
 
 			j += 1;
 		}
 	}
 
 	for (i, v) in huffval.iter().enumerate() {
-		if huffsize.as_slice()[i] > 8 {
+		if huffsize[i] > 8 {
 			break
 		}
 
-		let r = 8 - huffsize.as_slice()[i] as uint;
+		let r = 8 - huffsize[i] as uint;
 
 		for j in range(0u, 1 << r) {
-			let index = (huffcode.as_slice()[i] << r) + j as u16;
-			lut.as_mut_slice()[index as uint] = (*v, huffsize.as_slice()[i]);
+			let index = (huffcode[i] << r) + j as u16;
+			lut.as_mut_slice()[index as uint] = (*v, huffsize[i]);
 		}
 	}
 

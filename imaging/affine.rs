@@ -7,13 +7,12 @@ use image::GenericImage;
 use image::ImageBuf;
 
 ///Rotate ```pixels``` 90 degrees clockwise.
-pub fn rotate90<P: Primitive, T: Pixel<P> + Default + Clone + Copy, I: GenericImage<T>>(
+pub fn rotate90<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
         image:  &I) -> ImageBuf<T> {
 
         let (width, height) = image.dimensions();
 
-        let d: T = Default::default();
-        let mut out = ImageBuf::from_pixel(height, width, d);
+        let mut out = ImageBuf::new(height, width);
 
         for y in range(0, height) {
                 for x in range(0, width) {
@@ -26,13 +25,12 @@ pub fn rotate90<P: Primitive, T: Pixel<P> + Default + Clone + Copy, I: GenericIm
 }
 
 ///Rotate ```pixels``` 180 degrees clockwise.
-pub fn rotate180<P: Primitive, T: Pixel<P> + Default + Copy + Clone, I: GenericImage<T>>(
+pub fn rotate180<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
         image:  &I) -> ImageBuf<T> {
 
         let (width, height) = image.dimensions();
 
-        let d: T = Default::default();
-        let mut out = ImageBuf::from_pixel(width, height, d);
+        let mut out = ImageBuf::new(width, height);
 
         for y in range(0, height) {
                 for x in range(0, width) {
@@ -45,13 +43,12 @@ pub fn rotate180<P: Primitive, T: Pixel<P> + Default + Copy + Clone, I: GenericI
 }
 
 ///Rotate ```pixels``` 270 degrees clockwise.
-pub fn rotate270<P: Primitive, T: Pixel<P> + Default + Copy + Clone, I: GenericImage<T>>(
+pub fn rotate270<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
         image:  &I) -> ImageBuf<T> {
 
         let (width, height) = image.dimensions();
 
-        let d: T = Default::default();
-        let mut out = ImageBuf::from_pixel(height, width, d);
+        let mut out = ImageBuf::new(height, width);
 
         for y in range(0, height) {
                 for x in range(0, width) {
@@ -64,13 +61,12 @@ pub fn rotate270<P: Primitive, T: Pixel<P> + Default + Copy + Clone, I: GenericI
 }
 
 ///Flip ```pixels``` horizontally
-pub fn flip_horizontal<P: Primitive, T: Pixel<P> + Default + Copy + Clone, I: GenericImage<T>>(
+pub fn flip_horizontal<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
         image:  &I) -> ImageBuf<T> {
 
         let (width, height) = image.dimensions();
 
-        let d: T = Default::default();
-        let mut out = ImageBuf::from_pixel(height, width, d);
+        let mut out = ImageBuf::new(height, width);
 
         for y in range(0, height) {
                 for x in range(0, width) {
@@ -83,13 +79,12 @@ pub fn flip_horizontal<P: Primitive, T: Pixel<P> + Default + Copy + Clone, I: Ge
 }
 
 ///Flip ```pixels``` vertically
-pub fn flip_vertical<P: Primitive, T: Pixel<P> + Default + Copy + Clone, I: GenericImage<T>>(
+pub fn flip_vertical<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
         image:  &I) -> ImageBuf<T> {
 
         let (width, height) = image.dimensions();
 
-        let d: T = Default::default();
-        let mut out = ImageBuf::from_pixel(width, height, d);
+        let mut out = ImageBuf::new(width, height);
 
         for y in range(0, height) {
                 for x in range(0, width) {

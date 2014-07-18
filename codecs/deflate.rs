@@ -144,7 +144,7 @@ impl<R: Reader> Inflater<R> {
 					let repeat = 3 + try!(self.h.receive(2));
 
 					for _ in range(0, repeat) {
-						all_lengths.as_mut_slice()[i as uint] = all_lengths.as_slice()[i as uint - 1];
+						all_lengths.as_mut_slice()[i as uint] = all_lengths[i as uint - 1];
 						i += 1;
 					}
 				}
@@ -228,7 +228,7 @@ impl<R: Reader> Inflater<R> {
 
 					let len = self.buf.len();
 					for i in range(0, length) {
-						let s = self.buf.as_slice()[len - distance as uint + i as uint];
+						let s = self.buf[len - distance as uint + i as uint];
 						self.buf.push(s);
 					}
 				}
@@ -257,7 +257,7 @@ impl<R: Reader> Reader for Inflater<R> {
 
 		let n = cmp::min(buf.len(), self.buf.len() - self.pos as uint);
 		for i in range(0u, n) {
-			buf.as_mut_slice()[i] = self.buf.as_slice()[self.pos as uint + i];
+			buf.as_mut_slice()[i] = self.buf[self.pos as uint + i];
 		}
 
 		self.pos += n as u64;
@@ -291,7 +291,7 @@ fn table_from_lengths(lengths: &[u8]) -> Vec<TableElement> {
 	bl_count.as_mut_slice()[0] = 0;
 
 	for bits in range(1u, 16) {
-		code = (code + bl_count.as_slice()[bits - 1] as u16) << 1;
+		code = (code + bl_count[bits - 1] as u16) << 1;
 		next_code.as_mut_slice()[bits] = code;
 	}
 
@@ -302,7 +302,7 @@ fn table_from_lengths(lengths: &[u8]) -> Vec<TableElement> {
 			continue
 		}
 
-		let code = next_code.as_slice()[len as uint];
+		let code = next_code[len as uint];
 		let code = reverse(code) >> (16 - len) as uint;
 
 		if len <= TABLESIZE {
@@ -316,7 +316,7 @@ fn table_from_lengths(lengths: &[u8]) -> Vec<TableElement> {
 		else {
 			let index = code & ((1 << TABLESIZE as uint) - 1);
 
-			if lut.as_slice()[index as uint] == Nothing {
+			if lut[index as uint] == Nothing {
 				let mask  = (1 << max_overflow as uint) - 1;
 				let array = Vec::from_elem(1 << max_overflow as uint, Nothing);
 
@@ -390,13 +390,13 @@ impl<R: Reader> HuffReader<R> {
 		loop {
 			let index = self.bits & ((1 << TABLESIZE as uint) - 1);
 
-			let (val, size) = match table.as_slice()[index as uint] {
+			let (val, size) = match table[index as uint] {
 				Symbol(val, size) => (val, size),
 
 				Table(mask, ref a) => {
 					let index = (self.bits >> TABLESIZE as uint) & mask as u32;
 
-					match a.as_slice()[index as uint] {
+					match a[index as uint] {
 						Symbol(val, size) => (val, size + TABLESIZE),
 						_ 		  => fail!("bad huffman code")
 					}

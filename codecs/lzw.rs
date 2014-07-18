@@ -98,13 +98,13 @@ impl<R: Reader> LZWReader<R> {
 				break
 			}
 
-			if self.dict.as_slice()[code as uint].is_none() {
-				self.dict.as_mut_slice()[code as uint] = Some(self.prev.clone() + vec![self.prev.as_slice()[0]]);
+			if self.dict[code as uint].is_none() {
+				self.dict.as_mut_slice()[code as uint] = Some(self.prev.clone() + vec![self.prev[0]]);
 			}
 
 			if self.prev.len() > 0 {
 				let mut tmp = self.prev.clone();
-				tmp.push(self.dict.as_slice()[code as uint].get_ref().as_slice()[0]);
+				tmp.push(self.dict[code as uint].get_ref()[0]);
 
 				self.dict.as_mut_slice()[self.next_code as uint] = Some(tmp);
 				self.next_code += 1;
@@ -114,9 +114,9 @@ impl<R: Reader> LZWReader<R> {
 				}
 			}
 
-			self.prev = self.dict.as_slice()[code as uint].get_ref().clone();
+			self.prev = self.dict[code as uint].get_ref().clone();
 
-			for &s in self.dict.as_slice()[code as uint].get_ref().iter() {
+			for &s in self.dict[code as uint].get_ref().iter() {
 				self.out.push(s);
 			}
 		}

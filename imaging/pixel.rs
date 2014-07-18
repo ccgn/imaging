@@ -1,5 +1,7 @@
 //! Types and functions for the representation of pixels.
 
+use std::default::Default;
+use std::num;
 use std::num::cast;
 use std::num::Bounded;
 
@@ -74,10 +76,10 @@ impl<T: Primitive> Rgba<T> {
 }
 
 /// A trait that all pixels implement.
-pub trait Pixel<T> {
+pub trait Pixel<T>: Copy + Clone + Default {
 	/// Construct a pixel from the 4 channels a, b, c and d.
 	/// If the pixel does not contain 4 channels the extra are ignored.
-	fn from_channels(&self, a: T, b: T, c: T, d: T) -> Self;
+	fn from_channels(a: T, b: T, c: T, d: T) -> Self;
 
 	/// Convert this pixel to RGB
 	fn to_rgb(&self) -> Rgb<T>;
@@ -107,8 +109,20 @@ pub trait Pixel<T> {
 	fn channels4(&self) -> (T, T, T, T);
 }
 
-impl<T: Primitive> Pixel<T> for Rgb<T> {
-	fn from_channels(&self, a: T, b: T, c: T, _: T) -> Rgb<T> {
+/*pub fn cast_channels<A: Primitive, B: Primitive, P: Pixel<A>, Q: Pixel<B>>(pixel: P) -> Q {
+	let (p1, p2, p3, p4) = pixel.channels4();
+
+	let q1 = num::cast::<A, B>(p1).unwrap();
+	let q2 = num::cast::<A, B>(p2).unwrap();
+	let q3 = num::cast::<A, B>(p3).unwrap();
+	let q4 = num::cast::<A, B>(p4).unwrap();
+
+	let q: Q = Pixel::from_channels(q1, q2, q3, q4);
+	q
+}*/
+
+impl<T: Primitive + Default> Pixel<T> for Rgb<T> {
+	fn from_channels(a: T, b: T, c: T, _: T) -> Rgb<T> {
 		Rgb(a, b, c)
 	}
 
@@ -178,8 +192,8 @@ impl<T: Primitive> Pixel<T> for Rgb<T> {
 	}
 }
 
-impl<T: Primitive> Pixel<T> for Rgba<T> {
-	fn from_channels(&self, a: T, b: T, c: T, d: T) -> Rgba<T> {
+impl<T: Primitive + Default> Pixel<T> for Rgba<T> {
+	fn from_channels(a: T, b: T, c: T, d: T) -> Rgba<T> {
 		Rgba(a, b, c, d)
 	}
 
@@ -241,8 +255,8 @@ impl<T: Primitive> Pixel<T> for Rgba<T> {
 	}
 }
 
-impl<T: Primitive> Pixel<T> for Luma<T> {
-	fn from_channels(&self, a: T, _: T, _: T, _: T) -> Luma<T> {
+impl<T: Primitive + Default> Pixel<T> for Luma<T> {
+	fn from_channels(a: T, _: T, _: T, _: T) -> Luma<T> {
 		Luma(a)
 	}
 
@@ -301,8 +315,8 @@ impl<T: Primitive> Pixel<T> for Luma<T> {
 	}
 }
 
-impl<T: Primitive> Pixel<T> for LumaA<T> {
-	fn from_channels(&self, a: T, b: T, _: T, _: T) -> LumaA<T> {
+impl<T: Primitive + Default> Pixel<T> for LumaA<T> {
+	fn from_channels(a: T, b: T, _: T, _: T) -> LumaA<T> {
 		LumaA(a, b)
 	}
 

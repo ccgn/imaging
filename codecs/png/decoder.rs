@@ -180,9 +180,9 @@ impl<R: Reader> PNGDecoder<R> {
 
 		let p = Vec::from_fn(256, |i| {
 			if i < len {
-				let r = buf.as_slice()[3 * i];
-				let g = buf.as_slice()[3 * i + 1];
-				let b = buf.as_slice()[3 * i + 2];
+				let r = buf[3 * i];
+				let g = buf[3 * i + 1];
+				let b = buf[3 * i + 2];
 
 				(r, g, b)
 			}

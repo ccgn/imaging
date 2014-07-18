@@ -600,7 +600,7 @@ fn build_huff_lut(bits: &[u8], huffval: &[u8]) -> Vec<(u8, u16)> {
 	let (huffsize, huffcode) = derive_codes_and_sizes(bits);
 
 	for (i, &v) in huffval.iter().enumerate() {
-		lut.as_mut_slice()[v as uint] = (huffsize.as_slice()[i], huffcode.as_slice()[i]);
+		lut.as_mut_slice()[v as uint] = (huffsize[i], huffcode[i]);
 	}
 
 	lut

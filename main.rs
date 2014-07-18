@@ -5,7 +5,7 @@ use std::io::File;
 
 use image::image::Image;
 use image::GenericImage;
-use image::{PNG, JPEG};
+use image::ImageOps;
 
 fn main() {
 	let file = if os::args().len() == 2 {
@@ -27,9 +27,9 @@ fn main() {
 	spawn(proc() {
 		let mut t = t;
 		let fout = File::create(&Path::new(format!("{}.png", os::args().as_slice()[1]))).unwrap();
-		let sub  = t.crop(0, 0, 400, 400).to_image();
+		t.invert();
 
-		let g = image::image::ImageRgb8(sub);
-		g.save(fout, PNG);
+		let g = image::image::ImageRgb8(t);
+		g.save(fout, image::PNG);
 	});
 }

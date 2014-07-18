@@ -643,7 +643,7 @@ impl BoolReader {
 		self.value = 0;
 
                 for _ in range(0u, 2) {
-                        self.value = (self.value << 8) | self.buf.as_slice()[self.index] as u32;
+                        self.value = (self.value << 8) | self.buf[self.index] as u32;
                         self.index += 1;
                 }
 
@@ -671,7 +671,7 @@ impl BoolReader {
 
 			if self.bit_count == 8 {
 				self.bit_count = 0;
-                                self.value |= self.buf.as_slice()[self.index] as u32;
+                                self.value |= self.buf[self.index] as u32;
                                 self.index += 1;
 			}
 		}

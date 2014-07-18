@@ -69,29 +69,29 @@ pub fn filter(method: FilterType, bpp: uint, previous: &[u8], current: &mut [u8]
 		NoFilter => (),
 		Sub      => {
 			for i in range(bpp, len) {
-				current[i] = orig.as_slice()[i] - orig.as_slice()[i - bpp];
+				current[i] = orig[i] - orig[i - bpp];
 			}
 		}
 		Up       => {
 			for i in range(0, len) {
-				current[i] = orig.as_slice()[i] - previous[i];
+				current[i] = orig[i] - previous[i];
 			}
 		}
 		Avg  => {
 			for i in range(0, bpp) {
-				current[i] = orig.as_slice()[i] - previous[i] / 2;
+				current[i] = orig[i] - previous[i] / 2;
 			}
 
 			for i in range(bpp, len) {
-				current[i] = orig.as_slice()[i] - ((orig.as_slice()[i - bpp] as i16 + previous[i] as i16) / 2) as u8;
+				current[i] = orig[i] - ((orig[i - bpp] as i16 + previous[i] as i16) / 2) as u8;
 			}
 		}
 		Paeth    => {
 			for i in range(0, bpp) {
-				current[i] = orig.as_slice()[i] - filter_paeth(0, previous[i], 0);
+				current[i] = orig[i] - filter_paeth(0, previous[i], 0);
 			}
 			for i in range(bpp, len) {
-				current[i] = orig.as_slice()[i] - filter_paeth(orig.as_slice()[i - bpp], previous[i], previous[i - bpp]);
+				current[i] = orig[i] - filter_paeth(orig[i - bpp], previous[i], previous[i - bpp]);
 			}
 		}
 	}

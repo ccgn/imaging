@@ -139,15 +139,15 @@ fn clamp<N: Num + PartialOrd>(a: N, min: N, max: N) -> N {
 // ```height``` is the current height of ```pixels```.
 // ```nwidth``` is the desired width of ```pixels```
 // ```method``` is the filter to use for sampling.
-fn horizontal_sample<P: Primitive, T: Pixel<P> + Default + Clone + Copy, I: GenericImage<T>>(
+fn horizontal_sample<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
 	image:     &I,
 	new_width: u32,
 	filter:    &mut Filter) -> ImageBuf<T> {
 
         let (width, height) = image.dimensions();
 
-        let d: T = Default::default();
-        let mut out = ImageBuf::from_pixel(new_width, height, d);
+                        let mut out = ImageBuf::new(new_width, height);
+
 
 	for y in range(0, height) {
 		let max: P = Bounded::max_value();
@@ -209,7 +209,7 @@ fn horizontal_sample<P: Primitive, T: Pixel<P> + Default + Clone + Copy, I: Gene
                         t3 /= sum;
                         t4 /= sum;
 
-                        let t = tmp.from_channels(cast::<f32, P>(clamp(t1, 0.0, max)).unwrap(),
+                        let t: T = Pixel::from_channels(cast::<f32, P>(clamp(t1, 0.0, max)).unwrap(),
                                                   cast::<f32, P>(clamp(t2, 0.0, max)).unwrap(),
                                                   cast::<f32, P>(clamp(t3, 0.0, max)).unwrap(),
                                                   cast::<f32, P>(clamp(t4, 0.0, max)).unwrap());
@@ -227,15 +227,15 @@ fn horizontal_sample<P: Primitive, T: Pixel<P> + Default + Clone + Copy, I: Gene
 // ```height``` is the current height of ```pixels```.
 // ```nheight``` is the desired height of ```pixels```
 // ```method``` is the filter to use for sampling.
-fn vertical_sample<P: Primitive, T: Pixel<P> + Default + Clone + Copy, I: GenericImage<T>>(
+fn vertical_sample<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
 	image:      &I,
 	new_height: u32,
 	filter:     &mut Filter) -> ImageBuf<T> {
 
 	let (width, height) = image.dimensions();
 
-        let d: T = Default::default();
-        let mut out = ImageBuf::from_pixel(width, new_height, d);
+                       let mut out = ImageBuf::new(width, new_height);
+
 
         for x in range(0, width) {
                 let max: P = Bounded::max_value();
@@ -297,7 +297,7 @@ fn vertical_sample<P: Primitive, T: Pixel<P> + Default + Clone + Copy, I: Generi
                         t3 /= sum;
                         t4 /= sum;
 
-                        let t = tmp.from_channels(cast::<f32, P>(clamp(t1, 0.0, max)).unwrap(),
+                        let t: T = Pixel::from_channels(cast::<f32, P>(clamp(t1, 0.0, max)).unwrap(),
                                                   cast::<f32, P>(clamp(t2, 0.0, max)).unwrap(),
                                                   cast::<f32, P>(clamp(t3, 0.0, max)).unwrap(),
                                                   cast::<f32, P>(clamp(t4, 0.0, max)).unwrap());
@@ -313,7 +313,7 @@ fn vertical_sample<P: Primitive, T: Pixel<P> + Default + Clone + Copy, I: Generi
 /// ```width``` is the width of pixels.
 /// ```height``` is the height of pixels.
 /// ```kernel``` is an array of the filter weights of length 9.
-pub fn filter3x3<P: Primitive, T: Pixel<P> + Default + Clone + Copy, I: GenericImage<T>>(
+pub fn filter3x3<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
 	image:  &I,
 	kernel: &[f32]) -> ImageBuf<T> {
 
@@ -326,8 +326,8 @@ pub fn filter3x3<P: Primitive, T: Pixel<P> + Default + Clone + Copy, I: GenericI
 
         let (width, height) = image.dimensions();
 
-        let d: T = Default::default();
-        let mut out = ImageBuf::from_pixel(width, height, d);
+                let mut out = ImageBuf::new(width, height);
+
 
         let max: P = Bounded::max_value();
 	let max = cast::<P, f32>(max).unwrap();
@@ -374,7 +374,7 @@ pub fn filter3x3<P: Primitive, T: Pixel<P> + Default + Clone + Copy, I: GenericI
 
 			let tmp: T = Default::default();
 
-			let t = tmp.from_channels(cast::<f32, P>(clamp(t1, 0.0, max)).unwrap(),
+			let t: T = Pixel::from_channels(cast::<f32, P>(clamp(t1, 0.0, max)).unwrap(),
 						  cast::<f32, P>(clamp(t2, 0.0, max)).unwrap(),
 						  cast::<f32, P>(clamp(t3, 0.0, max)).unwrap(),
 						  cast::<f32, P>(clamp(t4, 0.0, max)).unwrap());
@@ -390,7 +390,7 @@ pub fn filter3x3<P: Primitive, T: Pixel<P> + Default + Clone + Copy, I: GenericI
 /// ```width``` and ```height``` are the original dimensions.
 /// ```nwidth``` and ```nheight``` are the new dimensions.
 /// ```filter``` is the sampling filter to use.
-pub fn resize<A: Primitive, T: Pixel<A> + Default + Clone + Copy, I: GenericImage<T>>(
+pub fn resize<A: Primitive, T: Pixel<A>, I: GenericImage<T>>(
 	image:   &I,
 	nwidth:  u32,
 	nheight: u32,
@@ -427,7 +427,7 @@ pub fn resize<A: Primitive, T: Pixel<A> + Default + Clone + Copy, I: GenericImag
 /// Perfomrs a Gausian blur on ```pixels```
 /// ```width``` and ```height``` are the dimensions of the buffer.
 /// ```sigma``` is a meausure of how much to blur by.
-pub fn blur<A: Primitive, T: Pixel<A> + Default + Clone + Copy, I: GenericImage<T>>(
+pub fn blur<A: Primitive, T: Pixel<A>, I: GenericImage<T>>(
         image:  &I,
         sigma:  f32) -> ImageBuf<T> {
 
@@ -455,7 +455,7 @@ pub fn blur<A: Primitive, T: Pixel<A> + Default + Clone + Copy, I: GenericImage<
 /// ```sigma``` is the amount to blur the image by.
 /// ```threshold``` is the threshold for the difference between
 /// see https://en.wikipedia.org/wiki/Unsharp_masking#Digital_unsharp_masking
-pub fn unsharpen<A: Primitive, T: Pixel<A> + Clone + Copy + Default + Copy, I: GenericImage<T>>(
+pub fn unsharpen<A: Primitive, T: Pixel<A>, I: GenericImage<T>>(
 	image:     &I,
 	sigma:     f32,
 	threshold: i32) -> ImageBuf<T> {

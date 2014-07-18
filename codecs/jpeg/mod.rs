@@ -65,7 +65,7 @@ pub fn derive_codes_and_sizes(bits: &[u8]) -> (Vec<u8>, Vec<u16>) {
 	//Generate table of individual code lengths
 	for i in range(0u, 16) {
 		j = 0;
-		while j < bits.as_slice()[i] {
+		while j < bits[i] {
 			huffsize.as_mut_slice()[k] = i as u8 + 1;
 			k += 1;
 			j += 1;
@@ -79,18 +79,18 @@ pub fn derive_codes_and_sizes(bits: &[u8]) -> (Vec<u8>, Vec<u16>) {
 	//Generate table of huffman codes
 	k = 0;
 	let mut code = 0u16;
-	let mut size = huffsize.as_slice()[0];
+	let mut size = huffsize[0];
 
-	while huffsize.as_slice()[k] != 0 {
+	while huffsize[k] != 0 {
 		huffcode.as_mut_slice()[k] = code;
 		code += 1;
 		k += 1;
 
-		if huffsize.as_slice()[k] == size {
+		if huffsize[k] == size {
 			continue
 		}
 
-		let diff = huffsize.as_slice()[k] - size;
+		let diff = huffsize[k] - size;
 		code <<= diff as uint;
 
 		size += diff
