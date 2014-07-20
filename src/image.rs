@@ -209,14 +209,14 @@ impl<T: Primitive, P: Pixel<T>> ImageBuf<P> {
                 ImageBuf::from_pixels(buf, width, height)
         }
 
-        ///An iterator over the pixels of this ImageBuf
-        pub fn iter<'a>(&'a self) -> slice::Items<'a, P> {
-                self.iter()
-        }
-
         ///Return an immutable reference to this image's pixel buffer
         pub fn pixelbuf<'a>(&'a self) -> &'a [P] {
                 self.pixels.as_slice()
+        }
+
+        ///Return a mutable reference to this image's pixel buffer
+        pub fn mut_pixelbuf<'a>(&'a mut self) -> &'a mut [P] {
+                self.pixels.as_mut_slice()
         }
 }
 

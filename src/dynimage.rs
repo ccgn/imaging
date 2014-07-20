@@ -295,13 +295,13 @@ fn image_to_bytes(image: &DynamicImage) -> Vec<u8> {
         match *image {
                 //TODO: consider transmuting
                 ImageLuma8(ref a) => {
-                        for &i in a.iter() {
+                        for &i in a.pixelbuf().iter() {
                                 r.push(i.channel());
                         }
                 }
 
                 ImageLumaA8(ref a) => {
-                        for &i in a.iter() {
+                        for &i in a.pixelbuf().iter() {
                                 let (l, a) = i.channels();
                                 r.push(l);
                                 r.push(a);
@@ -309,7 +309,7 @@ fn image_to_bytes(image: &DynamicImage) -> Vec<u8> {
                 }
 
                 ImageRgb8(ref a)  => {
-                        for &i in a.iter() {
+                        for &i in a.pixelbuf().iter() {
                                 let (red, g, b) = i.channels();
                                 r.push(red);
                                 r.push(g);
@@ -318,7 +318,7 @@ fn image_to_bytes(image: &DynamicImage) -> Vec<u8> {
                 }
 
                 ImageRgba8(ref a) => {
-                        for &i in a.iter() {
+                        for &i in a.pixelbuf().iter() {
                                 let (red, g, b, alpha) = i.channels();
                                 r.push(red);
                                 r.push(g);
