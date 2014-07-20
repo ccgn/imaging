@@ -73,6 +73,70 @@ macro_rules! dynamic_map(
 )
 
 impl DynamicImage {
+        ///Return a reference to an 8bit RGB image
+        pub fn as_rgb8<'a>(&'a self) -> Option<&'a ImageBuf<color::Rgb<u8>>> {
+                match *self {
+                        ImageRgb8(ref p) => Some(p),
+                        _                => None
+                }
+        }
+
+        ///Return a mutable reference to an 8bit RGB image
+        pub fn as_mut_rgb8<'a>(&'a mut self) -> Option<&'a mut ImageBuf<color::Rgb<u8>>> {
+                match *self {
+                        ImageRgb8(ref mut p) => Some(p),
+                        _                    => None
+                }
+        }
+
+        ///Return a reference to an 8bit RGBA image
+        pub fn as_rgba8<'a>(&'a self) -> Option<&'a ImageBuf<color::Rgba<u8>>> {
+                match *self {
+                        ImageRgba8(ref p) => Some(p),
+                        _                 => None
+                }
+        }
+
+        ///Return a mutable reference to an 8bit RGBA image
+        pub fn as_mut_rgba8<'a>(&'a mut self) -> Option<&'a mut ImageBuf<color::Rgba<u8>>> {
+                match *self {
+                        ImageRgba8(ref mut p) => Some(p),
+                        _                     => None
+                }
+        }
+
+        ///Return a reference to an 8bit Grayscale image
+        pub fn as_luma8<'a>(&'a self) -> Option<&'a ImageBuf<color::Luma<u8>>> {
+                match *self {
+                        ImageLuma8(ref p) => Some(p),
+                        _                 => None
+                }
+        }
+
+        ///Return a mutable reference to an 8bit Grayscale image
+        pub fn as_mut_luma8<'a>(&'a mut self) -> Option<&'a mut ImageBuf<color::Luma<u8>>> {
+                match *self {
+                        ImageLuma8(ref mut p) => Some(p),
+                        _                     => None
+                }
+        }
+
+        ///Return a reference to an 8bit Grayascale image with an alpha channel
+        pub fn as_luma_alpha8<'a>(&'a self) -> Option<&'a ImageBuf<color::LumaA<u8>>> {
+                match *self {
+                        ImageLumaA8(ref p) => Some(p),
+                        _                  => None
+                }
+        }
+
+        ///Return a mutable reference to an 8bit Grayascale image with an alpha channel
+        pub fn as_mut_luma_alpha8<'a>(&'a mut self) -> Option<&'a mut ImageBuf<color::LumaA<u8>>> {
+                match *self {
+                        ImageLumaA8(ref mut p) => Some(p),
+                        _                      => None
+                }
+        }
+
         ///Return the width and height of this image.
         pub fn dimensions(&self) -> (u32, u32) {
                 dynamic_map!(*self, ref p -> p.dimensions())

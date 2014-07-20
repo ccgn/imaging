@@ -1,5 +1,6 @@
 use std::slice;
 use std::default::Default;
+use std::iter::CloneableIterator;
 
 use color;
 use color::{
@@ -181,7 +182,7 @@ pub struct ImageBuf<P> {
 }
 
 impl<T: Primitive, P: Pixel<T>> ImageBuf<P> {
-        ///Construct a new ImageBuf with the specified with and height.
+        ///Construct a new ImageBuf with the specified width and height.
         pub fn new(width: u32, height: u32) -> ImageBuf<P> {
                 let pixel: P = Default::default();
                 let pixels = Vec::from_elem((width * height) as uint, pixel.clone());
@@ -191,6 +192,18 @@ impl<T: Primitive, P: Pixel<T>> ImageBuf<P> {
                         width:   width,
                         height:  height,
                 }
+        }
+
+        ///Construct a new ImageBuf by repeated application of the supplied function.
+        ///The arguments to the function are the pixel's x and y coordinates.
+        pub fn from_fn(width: u32, height: u32, f: |u32, u32| -> P) -> ImageBuf<P> {
+                let pixels = range(0, width).cycle()
+                                            .enumerate()
+                                            .take(height as uint)
+                                            .map(|(y, x)| f(x, y as u32))
+                                            .collect();
+
+                ImageBuf::from_pixels(pixels, width, height)
         }
 
 	///Construct a new ImageBuf from a vector of pixels.
@@ -231,9 +244,8 @@ impl<T: Primitive, P: Pixel<T> + Clone + Copy> GenericImage<P> for ImageBuf<P> {
 
         fn get_pixel(&self, x: u32, y: u32) -> P {
                 let index  = y * self.width + x;
-                let buf    = self.pixels.as_slice();
 
-                buf[index as uint]
+                self.pixels[index as uint]
         }
 
         fn put_pixel(&mut self, x: u32, y: u32, pixel: P) {
@@ -241,6 +253,15 @@ impl<T: Primitive, P: Pixel<T> + Clone + Copy> GenericImage<P> for ImageBuf<P> {
                 let buf    = self.pixels.as_mut_slice();
 
                 buf[index as uint] = pixel;
+        }
+}
+
+impl<T: Primitive, P: Pixel<T>> Index<(u32, u32), P> for ImageBuf<P> {
+        fn index<'a>(&'a self, coords: &(u32, u32)) -> &'a P {
+                let &(x, y) = coords;
+                let index  = y * self.width + x;
+
+                &self.pixels[index as uint]
         }
 }
 
