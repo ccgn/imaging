@@ -1,22 +1,11 @@
-use std::{
-	io,
-	slice
-};
-
-use std::ascii::StrAsciiExt;
+use std::slice;
 use std::default::Default;
-use color;
 
+use color;
 use color::{
         Pixel,
         ColorType
 };
-
-use ppm;
-use gif;
-use webp;
-use jpeg;
-use png;
 
 /// An enumeration of Image Errors
 #[deriving(Show, PartialEq, Eq)]
@@ -224,6 +213,11 @@ impl<T: Primitive, P: Pixel<T>> ImageBuf<P> {
         pub fn iter<'a>(&'a self) -> slice::Items<'a, P> {
                 self.iter()
         }
+
+        ///Return an immutable reference to this image's pixel buffer
+        pub fn pixelbuf<'a>(&'a self) -> &'a [P] {
+                self.pixels.as_slice()
+        }
 }
 
 impl<T: Primitive, P: Pixel<T> + Clone + Copy> GenericImage<P> for ImageBuf<P> {
@@ -303,211 +297,4 @@ impl<'a, T: Primitive, P: Pixel<T>, I: GenericImage<P>> GenericImage<P> for SubI
         fn put_pixel(&mut self, x: u32, y: u32, pixel: P) {
                 self.image.put_pixel(x + self.xoffset, y + self.yoffset, pixel)
         }
-}
-
-///A Dynamic Image
-#[deriving(Clone)]
-pub enum DynamicImage {
-        /// Each pixel in this image is 8-bit Luma
-        ImageLuma8(ImageBuf<color::Luma<u8>>),
-
-        /// Each pixel in this image is 8-bit Luma with alpha
-        ImageLumaA8(ImageBuf<color::LumaA<u8>>),
-
-        /// Each pixel in this image is 8-bit Rgb
-        ImageRgb8(ImageBuf<color::Rgb<u8>>),
-
-        /// Each pixel in this image is 8-bit Rgb with alpha
-        ImageRgba8(ImageBuf<color::Rgba<u8>>),
-}
-
-impl DynamicImage {
-        ///Return the width and height of this image.
-        pub fn dimensions(&self) -> (u32, u32) {
-                match *self {
-                        ImageLuma8(ref a) => a.dimensions(),
-                        ImageLumaA8(ref a) => a.dimensions(),
-                        ImageRgb8(ref a) => a.dimensions(),
-                        ImageRgba8(ref a) => a.dimensions(),
-                }
-        }
-
-        ///Return this image's pixels as a byte vector.
-        pub fn raw_pixels(&self) -> Vec<u8> {
-                image_to_bytes(self)
-        }
-
-        ///Return this image's color type.
-        pub fn color(&self) -> ColorType {
-                match *self {
-                        ImageLuma8(_) => color::Grey(8),
-                        ImageLumaA8(_) => color::GreyA(8),
-                        ImageRgb8(_) => color::RGB(8),
-                        ImageRgba8(_) => color::RGBA(8),
-                }
-        }
-
-        /// Encode this image and write it to ```w```
-        pub fn save<W: Writer>(&self, w: W, format: ImageFormat) -> io::IoResult<ImageResult<()>> {
-                let bytes = self.raw_pixels();
-                let (width, height) = self.dimensions();
-                let color = self.color();
-
-                let r = match format {
-                        PNG  => {
-                                let mut p = png::PNGEncoder::new(w);
-                                try!(p.encode(bytes.as_slice(), width, height, color))
-                                Ok(())
-                        }
-
-                        PPM  => {
-                                let mut p = ppm::PPMEncoder::new(w);
-                                try!(p.encode(bytes.as_slice(), width, height, color))
-                                Ok(())
-                        }
-
-                        JPEG => {
-                                let mut j = jpeg::JPEGEncoder::new(w);
-                                try!(j.encode(bytes.as_slice(), width, height, color))
-                                Ok(())
-                        }
-
-                        _    => Err(UnsupportedError),
-                };
-
-                Ok(r)
-        }
-}
-
-fn decoder_to_image<I: ImageDecoder>(codec: I) -> ImageResult<DynamicImage> {
-	let mut codec = codec;
-
-	let color  = try!(codec.colortype());
-	let buf    = try!(codec.read_image());
-	let (w, h) = try!(codec.dimensions());
-
-	let image = match color {
-		color::RGB(8) => {
-                        let p = buf.as_slice()
-                                   .chunks(3)
-                                   .map(|a| color::Rgb::<u8>(a[0], a[1], a[2]))
-                                   .collect();
-
-                        ImageRgb8(ImageBuf::from_pixels(p, w, h))
-                }
-
-                color::RGBA(8) => {
-                        let p = buf.as_slice()
-                                   .chunks(4)
-                                   .map(|a| color::Rgba::<u8>(a[0], a[1], a[2], a[3]))
-                                   .collect();
-
-                        ImageRgba8(ImageBuf::from_pixels(p, w, h))
-                }
-
-                color::Grey(8) => {
-                        let p = buf.as_slice()
-                                   .iter()
-                                   .map(|a| color::Luma::<u8>(*a))
-                                   .collect();
-
-                        ImageLuma8(ImageBuf::from_pixels(p, w, h))
-                }
-
-                color::GreyA(8) => {
-                        let p = buf.as_slice()
-                                   .chunks(2)
-                                   .map(|a| color::LumaA::<u8>(a[0], a[1]))
-                                   .collect();
-
-                        ImageLumaA8(ImageBuf::from_pixels(p, w, h))
-                }
-
-                _ => return Err(UnsupportedColor)
-	};
-
-	Ok(image)
-}
-
-fn image_to_bytes(image: &DynamicImage) -> Vec<u8> {
-        let mut r = Vec::new();
-
-        match *image {
-                //TODO: consider transmuting
-                ImageLuma8(ref a) => {
-                        for &i in a.iter() {
-                                r.push(i.channel());
-                        }
-                }
-
-                ImageLumaA8(ref a) => {
-                        for &i in a.iter() {
-                                let (l, a) = i.channels();
-                                r.push(l);
-                                r.push(a);
-                        }
-                }
-
-                ImageRgb8(ref a)  => {
-                        for &i in a.iter() {
-                                let (red, g, b) = i.channels();
-                                r.push(red);
-                                r.push(g);
-                                r.push(b);
-                        }
-                }
-
-                ImageRgba8(ref a) => {
-                        for &i in a.iter() {
-                                let (red, g, b, alpha) = i.channels();
-                                r.push(red);
-                                r.push(g);
-                                r.push(b);
-                                r.push(alpha);
-                        }
-                }
-        }
-
-        r
-}
-
-/// Open the image located at the path specified.
-/// The image's format is determined from the path's file extension.
-pub fn open(path: &Path) -> ImageResult<DynamicImage> {
-        let fin = match io::File::open(path) {
-                Ok(f)  => f,
-                Err(_) => return Err(IoError)
-        };
-
-        let ext    = path.extension_str()
-                         .map_or("".to_string(), |s| s.to_ascii_lower());
-
-        let format = match ext.as_slice() {
-                "jpg" |
-                "jpeg" => JPEG,
-                "png"  => PNG,
-                "gif"  => GIF,
-                "webp" => WEBP,
-                _      => return Err(UnsupportedError)
-        };
-
-        load(fin, format)
-}
-
-/// Create a new image from a Reader
-pub fn load<R: Reader>(r: R, format: ImageFormat) -> ImageResult<DynamicImage> {
-        match format {
-                PNG  => decoder_to_image(png::PNGDecoder::new(r)),
-                GIF  => decoder_to_image(gif::GIFDecoder::new(r)),
-                JPEG => decoder_to_image(jpeg::JPEGDecoder::new(r)),
-                WEBP => decoder_to_image(webp::WebpDecoder::new(r)),
-                _    => Err(UnsupportedError),
-        }
-}
-
-/// Create a new image from a byte slice
-pub fn load_from_memory(buf: &[u8], format: ImageFormat) -> ImageResult<DynamicImage> {
-        let b = io::BufReader::new(buf);
-
-        load(b, format)
 }

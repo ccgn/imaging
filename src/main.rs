@@ -14,7 +14,7 @@ fn main() {
 		fail!("Please enter a file")
 	};
 
-	let im=Image::open(&Path::new(file.clone())).unwrap();
+	let im = image::open(&Path::new(file.clone())).unwrap();
 
 	println!("dimensions {}", im.dimensions());
 	println!("{}", im.color());

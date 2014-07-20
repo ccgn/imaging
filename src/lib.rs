@@ -51,14 +51,14 @@ pub use image::{
         PPM
 };
 
-pub use DynamicImage = image::DynamicImage;
 pub use ImageBuf     = image::ImageBuf;
 pub use GenericImage = image::GenericImage;
 pub use SubImage     = image::SubImage;
 pub use Pixels       = image::Pixels;
+pub use DynamicImage = dynimage::DynamicImage;
 
-///Creating and loading images
-pub use image::{
+///opening and loading images
+pub use dynimage::{
         open,
         load,
         load_from_memory,
@@ -75,4 +75,5 @@ pub mod jpeg;
 pub mod gif;
 
 mod image;
+mod dynimage;
 mod color;
