@@ -4,15 +4,17 @@
 // for some of the theory behind image scaling and convolution
 
 use std::f32;
+
 use std::num::{
         cast,
         Bounded
 };
-use std::default::Default;
 
-use imaging::pixel::Pixel;
-use image::GenericImage;
-use image::ImageBuf;
+use color::Pixel;
+use image::{
+        GenericImage,
+        ImageBuf,
+};
 
 /// Available Sampling Filters
 pub enum FilterType {
@@ -173,8 +175,6 @@ fn horizontal_sample<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
                         let right = (inputx + filter_radius).floor() as u32;
                         let right = clamp(right, 0, width - 1);
 
-                        let tmp: T = Default::default();
-
                         let mut sum = 0.0;
 
                         let mut t1 = 0.0;
@@ -190,10 +190,12 @@ fn horizontal_sample<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
                                 let p = image.get_pixel(x0, y);
 
                                 let (k1, k2, k3, k4) = p.channels4();
-                                let (a, b, c, d) = (cast::<P, f32>(k1).unwrap(),
-                                                    cast::<P, f32>(k2).unwrap(),
-                                                    cast::<P, f32>(k3).unwrap(),
-                                                    cast::<P, f32>(k4).unwrap());
+                                let (a, b, c, d) = (
+                                        cast::<P, f32>(k1).unwrap(),
+                                        cast::<P, f32>(k2).unwrap(),
+                                        cast::<P, f32>(k3).unwrap(),
+                                        cast::<P, f32>(k4).unwrap()
+                                );
 
                                 let (a1, b1, c1, d1) = ( a  * w,  b * w,   c * w,   d * w);
                                 let (a2, b2, c2, d2) = (a1 + t1, b1 + t2, c1 + t3, d1 + t4);
@@ -209,10 +211,12 @@ fn horizontal_sample<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
                         t3 /= sum;
                         t4 /= sum;
 
-                        let t: T = Pixel::from_channels(cast::<f32, P>(clamp(t1, 0.0, max)).unwrap(),
-                                                  cast::<f32, P>(clamp(t2, 0.0, max)).unwrap(),
-                                                  cast::<f32, P>(clamp(t3, 0.0, max)).unwrap(),
-                                                  cast::<f32, P>(clamp(t4, 0.0, max)).unwrap());
+                        let t: T = Pixel::from_channels(
+                                cast::<f32, P>(clamp(t1, 0.0, max)).unwrap(),
+                                cast::<f32, P>(clamp(t2, 0.0, max)).unwrap(),
+                                cast::<f32, P>(clamp(t3, 0.0, max)).unwrap(),
+                                cast::<f32, P>(clamp(t4, 0.0, max)).unwrap()
+                        );
 
                         out.put_pixel(outx, y, t);
         	}
@@ -261,8 +265,6 @@ fn vertical_sample<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
                         let right = (inputy + filter_radius).floor() as u32;
                         let right = clamp(right, 0, height - 1);
 
-                        let tmp: T = Default::default();
-
                         let mut sum = 0.0;
 
                         let mut t1 = 0.0;
@@ -278,10 +280,12 @@ fn vertical_sample<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
                                 let p = image.get_pixel(x, y0);
 
                                 let (k1, k2, k3, k4) = p.channels4();
-                                let (a, b, c, d) = (cast::<P, f32>(k1).unwrap(),
-                                                    cast::<P, f32>(k2).unwrap(),
-                                                    cast::<P, f32>(k3).unwrap(),
-                                                    cast::<P, f32>(k4).unwrap());
+                                let (a, b, c, d) = (
+                                        cast::<P, f32>(k1).unwrap(),
+                                        cast::<P, f32>(k2).unwrap(),
+                                        cast::<P, f32>(k3).unwrap(),
+                                        cast::<P, f32>(k4).unwrap()
+                                );
 
                                 let (a1, b1, c1, d1) = ( a  * w,  b * w,   c * w,   d * w);
                                 let (a2, b2, c2, d2) = (a1 + t1, b1 + t2, c1 + t3, d1 + t4);
@@ -297,10 +301,12 @@ fn vertical_sample<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
                         t3 /= sum;
                         t4 /= sum;
 
-                        let t: T = Pixel::from_channels(cast::<f32, P>(clamp(t1, 0.0, max)).unwrap(),
-                                                  cast::<f32, P>(clamp(t2, 0.0, max)).unwrap(),
-                                                  cast::<f32, P>(clamp(t3, 0.0, max)).unwrap(),
-                                                  cast::<f32, P>(clamp(t4, 0.0, max)).unwrap());
+                        let t: T = Pixel::from_channels(
+                                cast::<f32, P>(clamp(t1, 0.0, max)).unwrap(),
+                                cast::<f32, P>(clamp(t2, 0.0, max)).unwrap(),
+                                cast::<f32, P>(clamp(t3, 0.0, max)).unwrap(),
+                                cast::<f32, P>(clamp(t4, 0.0, max)).unwrap()
+                        );
 
                         out.put_pixel(x, outy, t);
                 }
@@ -347,17 +353,19 @@ pub fn filter3x3<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
 			//Only a subtract and addition is needed for pixels after the first
 			//in each row.
 			for (&k, &(a, b)) in kernel.iter().zip(taps.iter()) {
-                                let x0 = x as int + a as int;
-                                let y0 = y as int + b as int;
+                                let x0 = x as int + a;
+                                let y0 = y as int + b;
 
 				let p = image.get_pixel(x0 as u32, y0 as u32);
 
 				let (k1, k2, k3, k4) = p.channels4();
 
-				let (a, b, c, d) = (cast::<P, f32>(k1).unwrap(),
-					    	    cast::<P, f32>(k2).unwrap(),
-					    	    cast::<P, f32>(k3).unwrap(),
-					    	    cast::<P, f32>(k4).unwrap());
+				let (a, b, c, d) = (
+                                        cast::<P, f32>(k1).unwrap(),
+					cast::<P, f32>(k2).unwrap(),
+					cast::<P, f32>(k3).unwrap(),
+					cast::<P, f32>(k4).unwrap()
+                                );
 
 				let (a1, b1, c1, d1) = (a * k, b * k, c * k, d * k);
 
@@ -372,12 +380,12 @@ pub fn filter3x3<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
 			t3 /= sum;
 			t4 /= sum;
 
-			let tmp: T = Default::default();
-
-			let t: T = Pixel::from_channels(cast::<f32, P>(clamp(t1, 0.0, max)).unwrap(),
-						  cast::<f32, P>(clamp(t2, 0.0, max)).unwrap(),
-						  cast::<f32, P>(clamp(t3, 0.0, max)).unwrap(),
-						  cast::<f32, P>(clamp(t4, 0.0, max)).unwrap());
+			let t: T = Pixel::from_channels(
+                                cast::<f32, P>(clamp(t1, 0.0, max)).unwrap(),
+				cast::<f32, P>(clamp(t2, 0.0, max)).unwrap(),
+				cast::<f32, P>(clamp(t3, 0.0, max)).unwrap(),
+				cast::<f32, P>(clamp(t4, 0.0, max)).unwrap()
+                        );
 
                         out.put_pixel(x, y, t);
                 }

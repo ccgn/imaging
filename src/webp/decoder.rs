@@ -6,10 +6,10 @@ use image;
 use image::ImageResult;
 use image::ImageDecoder;
 
-use imaging::colortype;
+use color;
 
-use codecs::vp8::Frame;
-use codecs::vp8::VP8Decoder;
+use super::vp8::Frame;
+use super::vp8::VP8Decoder;
 
 macro_rules! io_try(
 	($e:expr) => (
@@ -102,8 +102,8 @@ impl<R: Reader> ImageDecoder for WebpDecoder<R> {
 		Ok((self.frame.width as u32, self.frame.height as u32))
 	}
 
-	fn colortype(&mut self) -> ImageResult<colortype::ColorType> {
-		Ok(colortype::Grey(8))
+	fn colortype(&mut self) -> ImageResult<color::ColorType> {
+		Ok(color::Grey(8))
 	}
 
 	fn row_len(&mut self) -> ImageResult<uint> {

@@ -4,9 +4,9 @@ use std::io::MemReader;
 use image;
 use image::ImageResult;
 use image::ImageDecoder;
-use imaging::colortype;
+use color;
 
-use lzw::LZWReader;
+use super::lzw::LZWReader;
 
 macro_rules! io_try(
 	($e:expr) => (
@@ -286,10 +286,10 @@ impl<R: Reader> ImageDecoder for GIFDecoder<R> {
 		Ok((self.width as u32, self.height as u32))
 	}
 
-	fn colortype(&mut self) -> ImageResult<colortype::ColorType> {
+	fn colortype(&mut self) -> ImageResult<color::ColorType> {
 		let _ = try!(self.read_metadata());
 
-		Ok(colortype::RGB(8))
+		Ok(color::RGB(8))
 	}
 
 	fn row_len(&mut self) -> ImageResult<uint> {

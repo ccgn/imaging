@@ -4,25 +4,64 @@ use std::iter::range_step;
 use std::default::Default;
 use std::collections::smallintmap::SmallIntMap;
 
-use imaging::colortype;
-use transform;
+use color;
+use super::transform;
+
+use super::entropy::{
+	HuffTable,
+	HuffDecoder,
+	derive_tables,
+};
 
 use image;
 use image::ImageResult;
 use image::ImageDecoder;
 
-use super::Component;
-use super::UNZIGZAG;
-use super::derive_codes_and_sizes;
-
 macro_rules! io_try(
-    ($e:expr) => (
-    	match $e {
-    		Ok(e) => e,
-    		Err(_) => return Err(image::IoError)
-    	}
-    )
+	($e:expr) => (
+		match $e {
+    			Ok(e) => e,
+    			Err(_) => return Err(image::IoError)
+    		}
+    	)
 )
+
+/// The permutation of dct coefficients.
+pub static UNZIGZAG: [u8, ..64] = [
+	 0,  1,  8, 16,  9,  2,  3, 10,
+	17, 24, 32, 25, 18, 11,  4,  5,
+	12, 19, 26, 33, 40, 48, 41, 34,
+	27, 20, 13,  6,  7, 14, 21, 28,
+	35, 42, 49, 56, 57, 50, 43, 36,
+	29, 22, 15, 23, 30, 37, 44, 51,
+	58, 59, 52, 45, 38, 31, 39, 46,
+	53, 60, 61, 54, 47, 55, 62, 63,
+];
+
+/// A representation of a JPEG component
+#[deriving(Clone)]
+pub struct Component {
+	/// The Component's identifier
+	pub id: u8,
+
+	/// Horizontal sampling factor
+	pub h: u8,
+
+	/// Vertical sampling factor
+	pub v: u8,
+
+	/// The quantization table selector
+	pub tq: u8,
+
+	/// Index to the Huffman DC Table
+	pub dc_table: u8,
+
+	/// Index to the AC Huffman Table
+	pub ac_table: u8,
+
+	/// The dc prediction of the component
+	pub dc_pred: i32
+}
 
 //Markers
 //Baseline DCT
@@ -53,15 +92,6 @@ static APPF: u8 = 0xEF;
 static COM: u8 = 0xFE;
 //Reserved
 static TEM: u8 = 0x01;
-
-#[deriving(Default, Clone)]
-struct HuffTable {
-	lut:     Vec<(u8, u8)>,
-	valptr:  Vec<int>,
-	huffval: Vec<u8>,
-	maxcode: Vec<int>,
-	mincode: Vec<int>,
-}
 
 #[deriving(PartialEq)]
 enum JPEGState {
@@ -522,15 +552,15 @@ impl<R: Reader> ImageDecoder for JPEGDecoder<R> {
 		Ok((self.width as u32, self.height as u32))
 	}
 
-	fn colortype(&mut self) -> ImageResult<colortype::ColorType> {
+	fn colortype(&mut self) -> ImageResult<color::ColorType> {
 		if self.state == Start {
 			let _ = try!(self.read_metadata());
 		}
 
 		let ctype = if self.num_components == 1 {
-			colortype::Grey(8)
+			color::Grey(8)
 		} else {
-			colortype::RGB(8)
+			color::RGB(8)
 		};
 
 		Ok(ctype)
@@ -655,138 +685,5 @@ fn extend(v: i32, t: u8) -> i32 {
 	}
 	else {
 		v
-	}
-}
-
-struct HuffDecoder {
-	bits: u32,
-	num_bits: u8,
-	end: bool,
-	marker: u8,
-}
-
-impl HuffDecoder {
-	pub fn new() -> HuffDecoder {
-		HuffDecoder {bits: 0, num_bits: 0, end: false, marker: 0}
-	}
-
-	fn guarantee<R: Reader>(&mut self, r: &mut R, n: u8) -> ImageResult<()> {
-		while self.num_bits < n && !self.end {
-			let byte = io_try!(r.read_u8());
-
-			if byte == 0xFF {
-				let byte2 = io_try!(r.read_u8());
-				if byte2 != 0 {
-					self.marker = byte2;
-					self.end = true;
-				}
-			}
-
-			self.bits |= (byte as u32 << (32 - 8)) >> self.num_bits as uint;
-			self.num_bits += 8;
-		}
-
-		Ok(())
-	}
-
-	pub fn read_bit<R: Reader>(&mut self, r: &mut R) -> ImageResult<u8> {
-		let _ = try!(self.guarantee(r, 1));
-
-		let bit = (self.bits & (1 << 31)) >> 31;
-		self.consume(1);
-
-		Ok(bit as u8)
-	}
-
-	//Section F.2.2.4
-	//Figure F.17
-	pub fn receive<R: Reader>(&mut self, r: &mut R, ssss: u8) -> ImageResult<i32> {
-		let _ = try!(self.guarantee(r, ssss));
-
-		let bits = (self.bits & (0xFFFFFFFFu32 << (32 - ssss as uint))) >> (32 - ssss) as uint;
-		self.consume(ssss);
-
-		Ok(bits as i32)
-	}
-
-	fn consume(&mut self, n: u8) {
-		self.bits <<= n as uint;
-		self.num_bits -= n;
-	}
-
-	pub fn decode_symbol<R: Reader>(&mut self, r: &mut R, table: &HuffTable) -> ImageResult<u8> {
-		let _ = try!(self.guarantee(r, 8));
-		let index = (self.bits & 0xFF000000) >> (32 - 8);
-		let (val, size) = table.lut[index as uint];
-
-		if index < 256 && size < 9 {
-			self.consume(size);
-
-			return Ok(val)
-		}
-		else {
-			let mut code = 0u;
-
-			for i in range(0u, 16) {
-				let b = try!(self.read_bit(r));
-				code |= b as uint;
-
-				if (code as int) <= table.maxcode[i] {
-					let index = table.valptr[i] +
-						    code as int -
-						    table.mincode[i];
-
-					return Ok(table.huffval[index as uint])
-				}
-				code <<= 1;
-			}
-
-			return Err(image::FormatError)
-		}
-	}
-}
-
-fn derive_tables(bits: Vec<u8>, huffval: Vec<u8>) -> HuffTable {
-	let mut mincode = Vec::from_elem(16, -1i);
-	let mut maxcode = Vec::from_elem(16, -1i);
-	let mut valptr  = Vec::from_elem(16, -1i);
-	let mut lut     = Vec::from_elem(256, (0u8, 17u8));
-
-	let (huffsize, huffcode) = derive_codes_and_sizes(bits.as_slice());
-
-	//Annex F.2.2.3
-	//Figure F.15
-	let mut j = 0;
-
-	for i in range(0u, 16) {
-		if bits[i] != 0 {
-			valptr.as_mut_slice()[i] = j;
-			mincode.as_mut_slice()[i] = huffcode[j as uint] as int;
-			j += bits[i] as int - 1;
-			maxcode.as_mut_slice()[i] = huffcode[j as uint] as int;
-
-			j += 1;
-		}
-	}
-
-	for (i, v) in huffval.iter().enumerate() {
-		if huffsize[i] > 8 {
-			break
-		}
-
-		let r = 8 - huffsize[i] as uint;
-
-		for j in range(0u, 1 << r) {
-			let index = (huffcode[i] << r) + j as u16;
-			lut.as_mut_slice()[index as uint] = (*v, huffsize[i]);
-		}
-	}
-
-	HuffTable {
-		lut: lut,
-		huffval: huffval,
-		maxcode: maxcode,
-		mincode: mincode,
-		valptr: valptr
 	}
 }

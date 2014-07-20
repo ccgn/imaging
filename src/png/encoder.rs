@@ -12,11 +12,11 @@ use std::io::{
 	MemWriter
 };
 
-use imaging::colortype;
-use hash::Crc32;
+use color;
+use super::hash::Crc32;
 
 use super::filter::filter;
-use super::PNGSIGNATURE;
+use super::decoder::PNGSIGNATURE;
 
 /// The representation of a PNG encoder
 pub struct PNGEncoder<W> {
@@ -40,7 +40,7 @@ impl<W: Writer> PNGEncoder<W> {
 		      image: &[u8],
 		      width: u32,
 		      height: u32,
-		      c: colortype::ColorType) -> IoResult<()> {
+		      c: color::ColorType) -> IoResult<()> {
 
 		let _ = try!(self.write_signature());
 
@@ -77,28 +77,28 @@ impl<W: Writer> PNGEncoder<W> {
 	}
 }
 
-fn build_ihdr(width: u32, height: u32, c: colortype::ColorType) -> (Vec<u8>, uint) {
+fn build_ihdr(width: u32, height: u32, c: color::ColorType) -> (Vec<u8>, uint) {
 	let mut m = MemWriter::with_capacity(13);
 
 	let _ = m.write_be_u32(width);
 	let _ = m.write_be_u32(height);
 
 	let (colortype, bit_depth) = match c {
-		colortype::Grey(1)    => (0, 1),
-		colortype::Grey(2)    => (0, 2),
-		colortype::Grey(4)    => (0, 4),
-		colortype::Grey(8)    => (0, 8),
-		colortype::Grey(16)   => (0, 16),
-		colortype::RGB(8)     => (2, 8),
-		colortype::RGB(16)    => (2, 16),
-		colortype::Palette(1) => (3, 1),
-		colortype::Palette(2) => (3, 2),
-		colortype::Palette(4) => (3, 4),
-		colortype::Palette(8) => (3, 8),
-		colortype::GreyA(8)   => (4, 8),
-		colortype::GreyA(16)  => (4, 16),
-		colortype::RGBA(8)    => (6, 8),
-		colortype::RGBA(16)   => (6, 16),
+		color::Grey(1)    => (0, 1),
+		color::Grey(2)    => (0, 2),
+		color::Grey(4)    => (0, 4),
+		color::Grey(8)    => (0, 8),
+		color::Grey(16)   => (0, 16),
+		color::RGB(8)     => (2, 8),
+		color::RGB(16)    => (2, 16),
+		color::Palette(1) => (3, 1),
+		color::Palette(2) => (3, 2),
+		color::Palette(4) => (3, 4),
+		color::Palette(8) => (3, 8),
+		color::GreyA(8)   => (4, 8),
+		color::GreyA(16)  => (4, 16),
+		color::RGBA(8)    => (6, 8),
+		color::RGBA(16)   => (6, 16),
 		_ => fail!("unsupported color type and bitdepth")
 	};
 

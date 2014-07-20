@@ -1,8 +1,8 @@
 use std::io;
 use std::io::IoResult;
 
-use hash::Adler32;
-use deflate::Inflater;
+use super::hash::Adler32;
+use super::deflate::Inflater;
 
 enum ZlibState {Start, CompressedData, End}
 

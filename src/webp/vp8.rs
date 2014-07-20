@@ -15,7 +15,7 @@
 use std::io::IoResult;
 use std::default::Default;
 
-use transform;
+use super::transform;
 
 static MAX_SEGMENTS: u8 = 4;
 static NUM_DCT_TOKENS: u8 = 12;

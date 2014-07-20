@@ -1,10 +1,10 @@
 //! Functions for performing affine transformations.
 
-use std::default::Default;
-
-use imaging::pixel::Pixel;
-use image::GenericImage;
-use image::ImageBuf;
+use color::Pixel;
+use image::{
+        GenericImage,
+        ImageBuf,
+};
 
 ///Rotate ```pixels``` 90 degrees clockwise.
 pub fn rotate90<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(

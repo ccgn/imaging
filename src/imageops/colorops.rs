@@ -4,14 +4,17 @@ use std::num::{
         Bounded
 };
 
-use imaging::pixel::{
+use std::default::Default;
+
+use color::{
         Pixel,
         Luma
 };
 
-use std::default::Default;
-use image::GenericImage;
-use image::ImageBuf;
+use image::{
+        GenericImage,
+        ImageBuf,
+};
 
 fn clamp<N: Num + PartialOrd>(a: N, min: N, max: N) -> N {
         if a > max { max }
@@ -25,8 +28,7 @@ pub fn grayscale<P: Primitive + Default, T: Pixel<P>, I: GenericImage<T>>(
 
         let (width, height) = image.dimensions();
 
-                        let mut out = ImageBuf::new(width, height);
-
+        let mut out = ImageBuf::new(width, height);
 
         for y in range(0, height) {
                 for x in range(0, width) {
@@ -64,8 +66,7 @@ pub fn contrast<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
 
         let (width, height) = image.dimensions();
 
-                       let mut out = ImageBuf::new(width, height);
-
+        let mut out = ImageBuf::new(width, height);
 
         let max: P = Bounded::max_value();
         let max = cast::<P, f32>(max).unwrap();
@@ -98,8 +99,7 @@ pub fn brighten<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
 
         let (width, height) = image.dimensions();
 
-                        let mut out = ImageBuf::new(width, height);
-
+        let mut out = ImageBuf::new(width, height);
 
         let max: P = Bounded::max_value();
         let max = cast::<P, i32>(max).unwrap();

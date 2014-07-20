@@ -6,8 +6,8 @@ use std::{
 	fmt,
 };
 
-use imaging::colortype;
-use imaging::colortype::{
+use color;
+use color::{
 	Grey,
 	Palette,
 	GreyA,
@@ -30,7 +30,7 @@ impl<W: Writer> PPMEncoder<W> {
 	/// Encode the buffer ```im``` as a PPM image.
 	/// ```width``` and ```height``` are the dimensions of the buffer.
 	/// ```color``` is the buffers ColorType.
-	pub fn encode(&mut self, im: &[u8], width: u32, height: u32, color: colortype::ColorType) -> IoResult<()> {
+	pub fn encode(&mut self, im: &[u8], width: u32, height: u32, color: color::ColorType) -> IoResult<()> {
 		let _ = try!(self.write_magic_number());
 		let _ = try!(self.write_metadata(width, height, color));
 
@@ -41,7 +41,7 @@ impl<W: Writer> PPMEncoder<W> {
 		self.w.write_str("P6\n")
 	}
 
-	fn write_metadata(&mut self, width: u32, height: u32, pixel_type: colortype::ColorType) -> IoResult<()> {
+	fn write_metadata(&mut self, width: u32, height: u32, pixel_type: color::ColorType) -> IoResult<()> {
 		let w = fmt::radix(width, 10);
 		let h = fmt::radix(height, 10);
 		let m = max_pixel_value(pixel_type);
@@ -49,7 +49,7 @@ impl<W: Writer> PPMEncoder<W> {
 		self.w.write_str(format!("{0} {1}\n{2}\n", w, h, m).as_slice())
 	}
 
-	fn write_image(&mut self, buf: &[u8], pixel_type: colortype::ColorType, width: u32, height: u32) -> IoResult<()> {
+	fn write_image(&mut self, buf: &[u8], pixel_type: color::ColorType, width: u32, height: u32) -> IoResult<()> {
 		assert!(buf.len() > 0);
 		match pixel_type {
 			Grey(8) => {
@@ -76,7 +76,7 @@ impl<W: Writer> PPMEncoder<W> {
 	}
 }
 
-fn max_pixel_value(pixel_type: colortype::ColorType) -> u16 {
+fn max_pixel_value(pixel_type: color::ColorType) -> u16 {
 	match pixel_type {
 		Grey(n)    => num::pow(2u16, n as uint) - 1,
 		RGB(n)     => num::pow(2u16, n as uint) - 1,

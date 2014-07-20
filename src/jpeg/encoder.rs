@@ -2,12 +2,12 @@ use std::io::MemWriter;
 use std::io::IoResult;
 use std::iter::range_step;
 
-use imaging::colortype;
-use transform;
+use color;
 
-use super::Component;
-use super::UNZIGZAG;
-use super::derive_codes_and_sizes;
+use super::transform;
+use super::decoder::Component;
+use super::decoder::UNZIGZAG;
+use super::entropy::build_huff_lut;
 
 //Markers
 //Baseline DCT
@@ -180,9 +180,9 @@ impl<W: Writer> JPEGEncoder<W> {
 		      image: &[u8],
 		      width: u32,
 		      height: u32,
-		      c: colortype::ColorType) -> IoResult<()> {
+		      c: color::ColorType) -> IoResult<()> {
 
-		let n = colortype::num_components(c);
+		let n = color::num_components(c);
 		let num_components = if n == 1 || n == 2 {1}
 							 else {3};
 
@@ -230,10 +230,10 @@ impl<W: Writer> JPEGEncoder<W> {
 		let _   = try!(self.write_segment(SOS, Some(buf)));
 
 		match c {
-			colortype::RGB(8)   => try!(self.encode_rgb(image, width as uint, height as uint, 3)),
-			colortype::RGBA(8)  => try!(self.encode_rgb(image, width as uint, height as uint, 4)),
-			colortype::Grey(8)  => try!(self.encode_grey(image, width as uint, height as uint, 1)),
-			colortype::GreyA(8) => try!(self.encode_grey(image, width as uint, height as uint, 2)),
+			color::RGB(8)   => try!(self.encode_rgb(image, width as uint, height as uint, 3)),
+			color::RGBA(8)  => try!(self.encode_rgb(image, width as uint, height as uint, 4)),
+			color::Grey(8)  => try!(self.encode_grey(image, width as uint, height as uint, 1)),
+			color::GreyA(8) => try!(self.encode_grey(image, width as uint, height as uint, 2)),
 			_  => fail!("unimplemented!")
 		};
 
@@ -593,15 +593,4 @@ fn copy_blocks_grey(source: &[u8],
 			gb[y * 8 + x] = value_at(source, ystride + xstride + 1);
 		}
 	}
-}
-
-fn build_huff_lut(bits: &[u8], huffval: &[u8]) -> Vec<(u8, u16)> {
-	let mut lut = Vec::from_elem(256, (17u8, 0u16));
-	let (huffsize, huffcode) = derive_codes_and_sizes(bits);
-
-	for (i, &v) in huffval.iter().enumerate() {
-		lut.as_mut_slice()[v as uint] = (huffsize[i], huffcode[i]);
-	}
-
-	lut
 }

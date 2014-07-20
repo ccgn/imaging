@@ -8,22 +8,22 @@ use std::io::MemReader;
 use image;
 use image::ImageResult;
 use image::ImageDecoder;
-use imaging::colortype;
+use color;
 
 use super::filter::unfilter;
-use super::PNGSIGNATURE;
-
-use hash::Crc32;
-use zlib::ZlibDecoder;
+use super::hash::Crc32;
+use super::zlib::ZlibDecoder;
 
 macro_rules! io_try(
-    ($e:expr) => (
-    	match $e {
-    		Ok(e) => e,
-    		Err(_) => return Err(image::IoError)
-    	}
-    )
+	($e:expr) => (
+		match $e {
+    			Ok(e) => e,
+    			Err(_) => return Err(image::IoError)
+    		}
+    	)
 )
+
+pub static PNGSIGNATURE: [u8, ..8] = [137, 80, 78, 71, 13, 10, 26, 10];
 
 #[deriving(PartialEq)]
 enum PNGState {
@@ -50,7 +50,7 @@ pub struct PNGDecoder<R> {
 
 	bit_depth: u8,
 	colour_type: u8,
-	pixel_type: colortype::ColorType,
+	pixel_type: color::ColorType,
 
 	palette: Option<Vec<(u8, u8, u8)>>,
 
@@ -69,7 +69,7 @@ impl<R: Reader> PNGDecoder<R> {
 	pub fn new(r: R) -> PNGDecoder<R> {
 		let idat_reader = IDATReader::new(r);
 		PNGDecoder {
-			pixel_type: colortype::Grey(1),
+			pixel_type: color::Grey(1),
 			palette: None,
 
 			previous: Vec::new(),
@@ -118,21 +118,21 @@ impl<R: Reader> PNGDecoder<R> {
 		self.colour_type = m.read_byte().unwrap();
 
 		self.pixel_type = match (self.colour_type, self.bit_depth) {
-			(0, 1)  => colortype::Grey(1),
-			(0, 2)  => colortype::Grey(2),
-			(0, 4)  => colortype::Grey(4),
-			(0, 8)  => colortype::Grey(8),
-			(0, 16) => colortype::Grey(16),
-			(2, 8)  => colortype::RGB(8),
-			(2, 16) => colortype::RGB(16),
-			(3, 1)  => colortype::RGB(8),
-			(3, 2)  => colortype::RGB(8),
-			(3, 4)  => colortype::RGB(8),
-			(3, 8)  => colortype::RGB(8),
-			(4, 8)  => colortype::GreyA(8),
-			(4, 16) => colortype::GreyA(16),
-			(6, 8)  => colortype::RGBA(8),
-			(6, 16) => colortype::RGBA(16),
+			(0, 1)  => color::Grey(1),
+			(0, 2)  => color::Grey(2),
+			(0, 4)  => color::Grey(4),
+			(0, 8)  => color::Grey(8),
+			(0, 16) => color::Grey(16),
+			(2, 8)  => color::RGB(8),
+			(2, 16) => color::RGB(16),
+			(3, 1)  => color::RGB(8),
+			(3, 2)  => color::RGB(8),
+			(3, 4)  => color::RGB(8),
+			(3, 8)  => color::RGB(8),
+			(4, 8)  => color::GreyA(8),
+			(4, 16) => color::GreyA(16),
+			(6, 8)  => color::RGBA(8),
+			(6, 16) => color::RGBA(16),
 			(_, _)  => return Err(image::FormatError)
 		};
 
@@ -212,8 +212,8 @@ impl<R: Reader> PNGDecoder<R> {
 
 			self.crc.update(chunk);
 
-			let s =  str::from_utf8_owned(self.chunk_type.clone())
-				.unwrap_or(String::from_str(""));
+			let s =  String::from_utf8(self.chunk_type.clone())
+					.unwrap_or(String::from_str(""));
 
 			match (s.as_slice(), self.state) {
 				("IHDR", HaveSignature) => {
@@ -282,7 +282,7 @@ impl<R: Reader> ImageDecoder for PNGDecoder<R> {
 		Ok((self.width, self.height))
 	}
 
-	fn colortype(&mut self) -> ImageResult<colortype::ColorType> {
+	fn colortype(&mut self) -> ImageResult<color::ColorType> {
 		if self.state == Start {
 			let _ = try!(self.read_metadata());
 		}
@@ -295,7 +295,7 @@ impl<R: Reader> ImageDecoder for PNGDecoder<R> {
 			let _ = try!(self.read_metadata());
 		}
 
-		let bits = colortype::bits_per_pixel(self.pixel_type);
+		let bits = color::bits_per_pixel(self.pixel_type);
 
 		Ok((bits * self.width as uint + 7) / 8)
 	}
