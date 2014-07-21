@@ -4,22 +4,24 @@ use std::os;
 use std::io::File;
 
 fn main() {
-	let file = if os::args().len() == 2 {
-		os::args().as_slice()[1].clone()
-	} else {
-		fail!("Please enter a file")
-	};
 
-	let im = image::open(&Path::new(file.clone())).unwrap();
+    let file = if os::args().len() == 2 {
+        os::args().as_slice()[1].clone()
+    } else {
+        fail!("Please enter a file")
+    };
 
-	println!("dimensions {}", im.dimensions());
-	println!("{}", im.color());
+    let im = image::open(&Path::new(file.clone())).unwrap();
 
-	spawn(proc() {
-		let mut t = im;
-		let fout = File::create(&Path::new(format!("{}.png", os::args().as_slice()[1]))).unwrap();
-		t.invert();
+    println!("dimensions {}", im.dimensions());
 
-		t.save(fout, image::PNG);
-	});
+    println!("{}", im.color());
+
+    spawn(proc() {
+        let mut t = im;
+        let fout = File::create(&Path::new(format!("{}.png", os::args().as_slice()[1]))).unwrap();
+        t.invert();
+
+        t.save(fout, image::PNG);
+    });
 }

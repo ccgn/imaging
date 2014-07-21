@@ -15,18 +15,18 @@ extern crate flate;
 pub use ColorType = color::ColorType;
 
 pub use color:: {
-        Grey,
-        RGB,
-        Palette,
-        GreyA,
-        RGBA,
+    Grey,
+    RGB,
+    Palette,
+    GreyA,
+    RGBA,
 
-        Pixel,
+    Pixel,
 
-        Luma,
-        LumaA,
-        Rgb,
-        Rgba,
+    Luma,
+    LumaA,
+    Rgb,
+    Rgba,
 };
 
 pub use ImageDecoder = image::ImageDecoder;
@@ -35,20 +35,20 @@ pub use ImageResult  = image::ImageResult;
 pub use ImageFormat  = image::ImageFormat;
 pub use FilterType   = imageops::FilterType;
 
-pub use imageops::{
-        Triangle,
-        Nearest,
-        CatmullRom,
-        Gaussian,
-        Lanczos3
+pub use imageops:: {
+    Triangle,
+    Nearest,
+    CatmullRom,
+    Gaussian,
+    Lanczos3
 };
 
-pub use image::{
-        PNG,
-        JPEG,
-        GIF,
-        WEBP,
-        PPM
+pub use image:: {
+    PNG,
+    JPEG,
+    GIF,
+    WEBP,
+    PPM
 };
 
 pub use ImageBuf     = image::ImageBuf;
@@ -58,10 +58,10 @@ pub use Pixels       = image::Pixels;
 pub use DynamicImage = dynimage::DynamicImage;
 
 ///opening and loading images
-pub use dynimage::{
-        open,
-        load,
-        load_from_memory,
+pub use dynimage:: {
+    open,
+    load,
+    load_from_memory,
 };
 
 //Image Processing Functions
