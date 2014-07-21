@@ -71,8 +71,9 @@ pub fn contrast<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
 
     for y in range(0, height) {
         for x in range(0, width) {
-            let f = image.get_pixel(x, y).map( | b | {
+            let f = image.get_pixel(x, y).map(|b| {
                 let c = cast::<P, f32>(b).unwrap();
+
                 let d = ((c / max - 0.5) * percent  + 0.5) * max;
                 let e = clamp(d, 0.0, max);
 
@@ -101,12 +102,12 @@ pub fn brighten<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
 
     for y in range(0, height) {
         for x in range(0, width) {
-            let e = image.get_pixel(x, y).map( | b | {
+            let e = image.get_pixel(x, y).map_with_alpha(|b| {
                 let c = cast::<P, i32>(b).unwrap();
                 let d = clamp(c + value, 0, max);
 
                 cast::<i32, P>(d).unwrap()
-            });
+            }, |alpha| alpha);
 
             out.put_pixel(x, y, e);
         }

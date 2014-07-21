@@ -202,7 +202,7 @@ impl<T: Primitive, P: Pixel<T>> ImageBuf<P> {
         let pixels = range(0, width).cycle()
                                     .enumerate()
                                     .take(height as uint)
-                                    .map( | (y, x) | f(x, y as u32))
+                                    .map( |(y, x)| f(x, y as u32))
                                     .collect();
 
         ImageBuf::from_pixels(pixels, width, height)
@@ -259,8 +259,8 @@ impl<T: Primitive, P: Pixel<T> + Clone + Copy> GenericImage<P> for ImageBuf<P> {
 }
 
 impl<T: Primitive, P: Pixel<T>> Index<(u32, u32), P> for ImageBuf<P> {
-    fn index<'a > (&'a self, coords: &(u32, u32)) -> &'a P {
-        let & (x, y) = coords;
+    fn index<'a>(&'a self, coords: &(u32, u32)) -> &'a P {
+        let &(x, y) = coords;
         let index  = y * self.width + x;
 
         &self.pixels[index as uint]

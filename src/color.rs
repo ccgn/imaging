@@ -136,8 +136,11 @@ pub trait Pixel<T>: Copy + Clone + Default {
     fn invert(&mut self);
 
     /// Apply the function ```f``` to each channel of this pixel.
-    /// If there is an alpha channel it is not changed.
     fn map(&self, f: | T | -> T) -> Self;
+
+    ///Apply the function f to each channel except the alpha channel.
+    ///Apply the function g to the alpha channel.
+    fn map_with_alpha(&self, f: |T| -> T, g: |T| -> T) -> Self;
 
     /// Apply the function ```f``` to each channel of this pixel and
     /// ```other``` pairwise.
@@ -201,6 +204,11 @@ impl < T: Primitive + Default > Pixel<T> for Rgb<T> {
         Rgb(r1, g1, b1)
     }
 
+    fn map_with_alpha(&self, f: |c: T| -> T, _: |a: T| -> T) -> Rgb<T> {
+        self.map(f)
+    }
+
+
     fn map2(&self, other: Rgb<T>, f: | a: T, b: T | -> T) -> Rgb<T> {
         let (r1, g1, b1) = self.channels();
         let (r2, g2, b2) = other.channels();
@@ -260,8 +268,20 @@ impl < T: Primitive + Default > Pixel<T> for Rgba<T> {
         let r1 = f(r);
         let g1 = f(g);
         let b1 = f(b);
+        let a1 = f(a);
 
-        Rgba(r1, g1, b1, a)
+        Rgba(r1, g1, b1, a1)
+    }
+
+    fn map_with_alpha(&self, f: |c: T| -> T, h: |b: T| -> T) -> Rgba<T> {
+        let (r, g, b, a) = self.channels();
+
+        let r1 = f(r);
+        let g1 = f(g);
+        let b1 = f(b);
+        let a1 = h(a);
+
+        Rgba(r1, g1, b1, a1)
     }
 
     fn map2(&self, other: Rgba<T>, f: | a: T, b: T | -> T) -> Rgba<T> {
@@ -325,6 +345,10 @@ impl < T: Primitive + Default > Pixel<T> for Luma<T> {
         Luma(l1)
     }
 
+    fn map_with_alpha(&self, f: |c: T| -> T, _: |a: T| -> T) -> Luma<T> {
+        self.map(f)
+    }
+
     fn map2(&self, other: Luma<T>, f: | a: T, b: T | -> T) -> Luma<T> {
         let l1 = self.channel();
         let l2 = other.channel();
@@ -383,8 +407,18 @@ impl < T: Primitive + Default > Pixel<T> for LumaA<T> {
         let (l, a) = self.channels();
 
         let l1 = f(l);
+        let a1 = f(a);
 
-        LumaA(l1, a)
+        LumaA(l1, a1)
+    }
+
+    fn map_with_alpha(&self, f: |c: T| -> T, g: |b: T| -> T) -> LumaA<T> {
+        let (l, a) = self.channels();
+
+        let l1 = f(l);
+        let a1 = g(a);
+
+        LumaA(l1, a1)
     }
 
     fn map2(&self, other: LumaA<T>, f: | a: T, b: T | -> T) -> LumaA<T> {

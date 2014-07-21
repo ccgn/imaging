@@ -82,7 +82,7 @@ impl DynamicImage {
     }
 
     ///Return a mutable reference to an 8bit RGB image
-    pub fn as_mut_rgb8<'a>(&'a mut self) -> Option<&'a mut ImageBuf<color::Rgb<u8> >> {
+    pub fn as_mut_rgb8<'a>(&'a mut self) -> Option<&'a mut ImageBuf<color::Rgb<u8>>> {
         match *self {
             ImageRgb8(ref mut p) => Some(p),
             _                    => None
@@ -98,7 +98,7 @@ impl DynamicImage {
     }
 
     ///Return a mutable reference to an 8bit RGBA image
-    pub fn as_mut_rgba8<'a>(&'a mut self) -> Option<&'a mut ImageBuf<color::Rgba<u8> >> {
+    pub fn as_mut_rgba8<'a>(&'a mut self) -> Option<&'a mut ImageBuf<color::Rgba<u8>>> {
         match *self {
             ImageRgba8(ref mut p) => Some(p),
             _                     => None
@@ -114,7 +114,7 @@ impl DynamicImage {
     }
 
     ///Return a mutable reference to an 8bit Grayscale image
-    pub fn as_mut_luma8<'a>(&'a mut self) -> Option<&'a mut ImageBuf<color::Luma<u8> >> {
+    pub fn as_mut_luma8<'a>(&'a mut self) -> Option<&'a mut ImageBuf<color::Luma<u8>>> {
         match *self {
             ImageLuma8(ref mut p) => Some(p),
             _                     => None
@@ -130,7 +130,7 @@ impl DynamicImage {
     }
 
     ///Return a mutable reference to an 8bit Grayascale image with an alpha channel
-    pub fn as_mut_luma_alpha8<'a>(&'a mut self) -> Option<&'a mut ImageBuf<color::LumaA<u8> >> {
+    pub fn as_mut_luma_alpha8<'a>(&'a mut self) -> Option<&'a mut ImageBuf<color::LumaA<u8>>> {
         match *self {
             ImageLumaA8(ref mut p) => Some(p),
             _                      => None
