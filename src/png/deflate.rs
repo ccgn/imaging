@@ -1,3 +1,11 @@
+//! An Implementation of RFC 1951
+//!
+//! The DEFLATE compression algorithm
+//!
+//! # Related Links
+//! *http://tools.ietf.org/html/rfc1951 - DEFLATE Compressed Data Format Specification
+
+
 use std::io;
 use std::cmp;
 use std::io::IoResult;
@@ -46,8 +54,12 @@ impl TableElement {
     }
 }
 
-enum BlockType {Stored, Compressed}
+enum BlockType {
+    Stored,
+    Compressed
+}
 
+///A DEFLATE compressed stream decoder.
 pub struct Inflater<R> {
     h:
     HuffReader<R>,
@@ -65,6 +77,7 @@ pub struct Inflater<R> {
 }
 
 impl<R: Reader> Inflater<R> {
+    /// Create a new decoder that decodes from a Reader
     pub fn new(r: R) -> Inflater<R> {
         Inflater {
             h: HuffReader::new(r),
@@ -82,10 +95,12 @@ impl<R: Reader> Inflater<R> {
         }
     }
 
+    /// Indicate whether the end of the stream has been reached.
     pub fn eof(&self) -> bool {
         self.final && (self.pos as uint == self.buf.len())
     }
 
+    /// Return a mutable reference to the wrapped Reader
     pub fn inner < 'a>(&'a mut self) -> &'a mut R {
         &mut self.h.r
     }

@@ -1,11 +1,23 @@
+//! An Implementation of RFC 1950
+//!
+//! Decoding of zlib compressed streams.
+//!
+//! # Related Links
+//! *http://tools.ietf.org/html/rfc1950 - ZLIB Compressed Data Format Specification
+
 use std::io;
 use std::io::IoResult;
 
 use super::hash::Adler32;
 use super::deflate::Inflater;
 
-enum ZlibState {Start, CompressedData, End}
+enum ZlibState {
+    Start,
+    CompressedData,
+    End
+}
 
+///A Zlib compressed stream decoder.
 pub struct ZlibDecoder<R> {
     inflate: Inflater<R>,
     adler: Adler32,
@@ -13,6 +25,7 @@ pub struct ZlibDecoder<R> {
 }
 
 impl<R: Reader> ZlibDecoder<R> {
+    /// Create a new decoder that decodes from a Reader
     pub fn new(r: R) -> ZlibDecoder<R> {
         ZlibDecoder {
             inflate: Inflater::new(r),
@@ -21,7 +34,8 @@ impl<R: Reader> ZlibDecoder<R> {
         }
     }
 
-    pub fn inner < 'a>(&'a mut self) -> &'a mut R {
+    /// Return a mutable reference to the wrapped Reader
+    pub fn inner <'a>(&'a mut self) -> &'a mut R {
         self.inflate.inner()
     }
 

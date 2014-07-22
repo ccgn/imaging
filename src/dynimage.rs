@@ -8,6 +8,7 @@ use jpeg;
 use png;
 
 use color;
+use color::Pixel;
 use imageops;
 use image;
 use image:: {
@@ -73,6 +74,16 @@ macro_rules! dynamic_map(
 )
 
 impl DynamicImage {
+    ///Return a cut out of this image delimited by the bounding rectangle.
+    pub fn crop(&mut self,
+                x: u32,
+                y: u32,
+                width: u32,
+                height: u32) -> DynamicImage {
+
+        dynamic_map!(*self, ref mut p => imageops::crop(p, x, y, width, height).to_image())
+    }
+
     ///Return a reference to an 8bit RGB image
     pub fn as_rgb8 < 'a>(&'a self) -> Option<&'a ImageBuf<color::Rgb<u8>>> {
         match *self {
@@ -135,11 +146,6 @@ impl DynamicImage {
             ImageLumaA8(ref mut p) => Some(p),
             _                      => None
         }
-    }
-
-    ///Return the width and height of this image.
-    pub fn dimensions(&self) -> (u32, u32) {
-        dynamic_map!(*self, ref p -> p.dimensions())
     }
 
     ///Return this image's pixels as a byte vector.
@@ -226,7 +232,8 @@ impl DynamicImage {
     /// Filters this image with the specified 3x3 kernel.
     pub fn filter3x3(&self, kernel: &[f32]) -> DynamicImage {
         if kernel.len() != 9 {
-            return self.clone()
+            //return self.clone()
+            fail!("filter must be 3 x 3")
         }
 
         dynamic_map!(*self, ref p => imageops::filter3x3(p, kernel))
@@ -272,7 +279,7 @@ impl DynamicImage {
     }
 
     /// Encode this image and write it to ```w```
-pub fn save<W: Writer>(&self, w: W, format: ImageFormat) -> io::IoResult<ImageResult<()>> {
+    pub fn save<W: Writer>(&self, w: W, format: ImageFormat) -> io::IoResult<ImageResult<()>> {
         let bytes = self.raw_pixels();
         let (width, height) = self.dimensions();
         let color = self.color();
@@ -282,27 +289,50 @@ pub fn save<W: Writer>(&self, w: W, format: ImageFormat) -> io::IoResult<ImageRe
                 let mut p = png::PNGEncoder::new(w);
 
                 try!(p.encode(bytes.as_slice(), width, height, color))
-                    Ok(())
+                Ok(())
             }
 
             image::PPM  => {
                 let mut p = ppm::PPMEncoder::new(w);
 
                 try!(p.encode(bytes.as_slice(), width, height, color))
-                    Ok(())
+                Ok(())
             }
 
             image::JPEG => {
                 let mut j = jpeg::JPEGEncoder::new(w);
 
                 try!(j.encode(bytes.as_slice(), width, height, color))
-                    Ok(())
+                Ok(())
             }
 
             _    => Err(image::UnsupportedError),
         };
 
         Ok(r)
+    }
+}
+
+impl GenericImage<color::Rgba<u8>> for DynamicImage {
+    fn dimensions(&self) -> (u32, u32) {
+        dynamic_map!(*self, ref p -> p.dimensions())
+    }
+
+    fn bounds(&self) -> (u32, u32, u32, u32) {
+        dynamic_map!(*self, ref p -> p.bounds())
+    }
+
+    fn get_pixel(&self, x: u32, y: u32) -> color::Rgba<u8> {
+        dynamic_map!(*self, ref p -> p.get_pixel(x, y).to_rgba())
+    }
+
+    fn put_pixel(&mut self, x: u32, y: u32, pixel: color::Rgba<u8>) {
+        match *self {
+            ImageLuma8(ref mut p) => p.put_pixel(x, y, pixel.to_luma()),
+            ImageLumaA8(ref mut p) => p.put_pixel(x, y, pixel.to_luma_alpha()),
+            ImageRgb8(ref mut p) => p.put_pixel(x, y, pixel.to_rgb()),
+            ImageRgba8(ref mut p) => p.put_pixel(x, y, pixel),
+        }
     }
 }
 

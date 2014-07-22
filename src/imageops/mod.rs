@@ -53,7 +53,7 @@ pub fn crop<'a, P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
     x: u32,
     y: u32,
     width: u32,
-    height: u32) -> SubImage < 'a, I> {
+    height: u32) -> SubImage <'a, I> {
 
     let (iwidth, iheight) = image.dimensions();
 

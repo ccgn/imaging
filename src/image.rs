@@ -268,7 +268,7 @@ impl<T: Primitive, P: Pixel<T>> Index<(u32, u32), P> for ImageBuf<P> {
 }
 
 /// A View into another image
-pub struct SubImage < 'a, I> {
+pub struct SubImage <'a, I> {
     image:   &'a mut I,
     xoffset: u32,
     yoffset: u32,
@@ -286,6 +286,19 @@ impl<'a, T: Primitive, P: Pixel<T>, I: GenericImage<P>> SubImage<'a, I> {
             xstride: width,
             ystride: height,
         }
+    }
+
+    ///Return a mutable reference to the wrapped image.
+    pub fn mut_inner<'a>(&'a mut self) -> &'a mut I {
+        &mut (*self.image)
+    }
+
+    ///Change the coordinates of this subimage.
+    pub fn change_bounds(&mut self, x: u32, y: u32, width: u32, height: u32) {
+        self.xoffset = x;
+        self.yoffset = y;
+        self.xstride = width;
+        self.ystride = height;
     }
 
     ///Convert this subimage to an ImageBuf

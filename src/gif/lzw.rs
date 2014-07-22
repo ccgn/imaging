@@ -1,3 +1,5 @@
+//! This modules provides an implementation of the Lempel–Ziv–Welch Compression Algorithm
+
 use std::io;
 use std::cmp;
 use std::slice;
@@ -5,6 +7,7 @@ use std::io::IoResult;
 
 static MAXCODESIZE: u8 = 12;
 
+/// An implementation of an LZW Decompressor.
 pub struct LZWReader<R> {
     r: R,
 
@@ -28,6 +31,7 @@ pub struct LZWReader<R> {
 }
 
 impl<R: Reader> LZWReader<R> {
+    /// Create a new decompressor from a Reader
     pub fn new(r: R, size: u8) -> LZWReader<R> {
         let mut dict = Vec::from_elem(1 << MAXCODESIZE as uint, None);
 
