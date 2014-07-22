@@ -85,7 +85,7 @@ impl DynamicImage {
     }
 
     ///Return a reference to an 8bit RGB image
-    pub fn as_rgb8 < 'a>(&'a self) -> Option<&'a ImageBuf<color::Rgb<u8>>> {
+    pub fn as_rgb8(&self) -> Option<&ImageBuf<color::Rgb<u8>>> {
         match *self {
             ImageRgb8(ref p) => Some(p),
             _                => None
@@ -93,7 +93,7 @@ impl DynamicImage {
     }
 
     ///Return a mutable reference to an 8bit RGB image
-    pub fn as_mut_rgb8<'a>(&'a mut self) -> Option<&'a mut ImageBuf<color::Rgb<u8>>> {
+    pub fn as_mut_rgb8(&mut self) -> Option<&mut ImageBuf<color::Rgb<u8>>> {
         match *self {
             ImageRgb8(ref mut p) => Some(p),
             _                    => None
@@ -101,7 +101,7 @@ impl DynamicImage {
     }
 
     ///Return a reference to an 8bit RGBA image
-    pub fn as_rgba8 < 'a>(&'a self) -> Option<&'a ImageBuf<color::Rgba<u8>>> {
+    pub fn as_rgba8(&self) -> Option<& ImageBuf<color::Rgba<u8>>> {
         match *self {
             ImageRgba8(ref p) => Some(p),
             _                 => None
@@ -109,7 +109,7 @@ impl DynamicImage {
     }
 
     ///Return a mutable reference to an 8bit RGBA image
-    pub fn as_mut_rgba8<'a>(&'a mut self) -> Option<&'a mut ImageBuf<color::Rgba<u8>>> {
+    pub fn as_mut_rgba8(&mut self) -> Option<&mut ImageBuf<color::Rgba<u8>>> {
         match *self {
             ImageRgba8(ref mut p) => Some(p),
             _                     => None
@@ -117,7 +117,7 @@ impl DynamicImage {
     }
 
     ///Return a reference to an 8bit Grayscale image
-    pub fn as_luma8 < 'a>(&'a self) -> Option<&'a ImageBuf<color::Luma<u8>>> {
+    pub fn as_luma8(& self) -> Option<& ImageBuf<color::Luma<u8>>> {
         match *self {
             ImageLuma8(ref p) => Some(p),
             _                 => None
@@ -125,7 +125,7 @@ impl DynamicImage {
     }
 
     ///Return a mutable reference to an 8bit Grayscale image
-    pub fn as_mut_luma8<'a>(&'a mut self) -> Option<&'a mut ImageBuf<color::Luma<u8>>> {
+    pub fn as_mut_luma8(&mut self) -> Option<&mut ImageBuf<color::Luma<u8>>> {
         match *self {
             ImageLuma8(ref mut p) => Some(p),
             _                     => None
@@ -133,7 +133,7 @@ impl DynamicImage {
     }
 
     ///Return a reference to an 8bit Grayascale image with an alpha channel
-    pub fn as_luma_alpha8 < 'a>(&'a self) -> Option<&'a ImageBuf<color::LumaA<u8>>> {
+    pub fn as_luma_alpha8(&self) -> Option<& ImageBuf<color::LumaA<u8>>> {
         match *self {
             ImageLumaA8(ref p) => Some(p),
             _                  => None
@@ -141,7 +141,7 @@ impl DynamicImage {
     }
 
     ///Return a mutable reference to an 8bit Grayascale image with an alpha channel
-    pub fn as_mut_luma_alpha8<'a>(&'a mut self) -> Option<&'a mut ImageBuf<color::LumaA<u8>>> {
+    pub fn as_mut_luma_alpha8(&mut self) -> Option<&mut ImageBuf<color::LumaA<u8>>> {
         match *self {
             ImageLumaA8(ref mut p) => Some(p),
             _                      => None
@@ -221,7 +221,7 @@ impl DynamicImage {
         dynamic_map!(*self, ref p => imageops::blur(p, sigma))
     }
 
-    /// Performs an unsharpen mask on ```pixels```
+    /// Performs an unsharpen mask on this image
     /// ```sigma``` is the amount to blur the image by.
     /// ```threshold``` is a control of how much to sharpen.
     /// see https://en.wikipedia.org/wiki/Unsharp_masking#Digital_unsharp_masking
@@ -239,14 +239,14 @@ impl DynamicImage {
         dynamic_map!(*self, ref p => imageops::filter3x3(p, kernel))
     }
 
-    /// Adjust the contrast of ```pixels```
+    /// Adjust the contrast of this image.
     /// ```contrast``` is the amount to adjust the contrast by.
     /// Negative values decrease the constrast and positive values increase the constrast.
     pub fn adjust_contrast(&self, c: f32) -> DynamicImage {
         dynamic_map!(*self, ref p => imageops::contrast(p, c))
     }
 
-    /// Brighten ```pixels```
+    /// Brighten the pixels of this image.
     /// ```value``` is the amount to brighten each pixel by.
     /// Negative values decrease the brightness and positive values increase it.
     pub fn brighten(&self, value: i32) -> DynamicImage {

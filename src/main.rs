@@ -2,6 +2,7 @@ extern crate image;
 
 use std::os;
 use std::io::File;
+use image::GenericImage;
 
 fn main() {
 
@@ -20,7 +21,6 @@ fn main() {
     spawn(proc() {
         let mut t = im;
         let fout = File::create(&Path::new(format!("{}.png", os::args().as_slice()[1]))).unwrap();
-        t.invert();
 
         t.save(fout, image::PNG);
     });

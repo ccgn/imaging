@@ -1,3 +1,4 @@
+use std::mem;
 use std::slice;
 use std::default::Default;
 use std::iter::CloneableIterator;
@@ -119,7 +120,7 @@ pub trait ImageDecoder {
 }
 
 /// Immutable pixel iterator
-pub struct Pixels < 'a, I> {
+pub struct Pixels<'a, I> {
     image:  &'a I,
     x:      u32,
     y:      u32,
@@ -147,6 +148,42 @@ impl<'a, T: Primitive, P: Pixel<T>, I: GenericImage<P>> Iterator<(u32, u32, P)> 
     }
 }
 
+/// Mutable pixel iterator
+pub struct MutPixels<'a, I> {
+    image:  &'a mut I,
+    x:      u32,
+    y:      u32,
+    width:  u32,
+    height: u32
+}
+
+impl<'a, T: Primitive, P: Pixel<T>, I: MutableRefImage<P>> Iterator<(u32, u32, &'a mut P)> for MutPixels<'a, I> {
+    fn next(&mut self) -> Option<(u32, u32, &'a mut P)> {
+        if self.x >= self.width {
+            self.x =  0;
+            self.y += 1;
+        }
+
+        if self.y >= self.height {
+            None
+        } else {
+            let tmp = self.image.get_mut_pixel(self.x, self.y);
+
+            //error: lifetime of `self` is too short to guarantee its contents
+            //       can be safely reborrowed...
+            let ptr = unsafe {
+                mem::transmute(tmp)
+            };
+
+            let p = (self.x, self.y, ptr);
+
+            self.x += 1;
+
+            Some(p)
+        }
+    }
+}
+
 ///A trait for manipulating images.
 pub trait GenericImage<P> {
     ///The width and height of this image.
@@ -161,11 +198,34 @@ pub trait GenericImage<P> {
     ///Put a pixel at location (x, y)
     fn put_pixel(&mut self, x: u32, y: u32, pixel: P);
 
-    ///Return an Iterator over the pixels of this image
-    fn pixels<'a>(&'a self) -> Pixels<'a, Self> {
+    ///Return an Iterator over the pixels of this image.
+    ///The iterator yeilds the coordiates of each pixel
+    ///along with their value
+    fn pixels(&self) -> Pixels<Self> {
         let (width, height) = self.dimensions();
 
         Pixels {
+            image:  self,
+            x:      0,
+            y:      0,
+            width:  width,
+            height: height,
+        }
+    }
+}
+
+///A trait for images that allow providing mutable references to pixels.
+pub trait MutableRefImage<P>: GenericImage<P> {
+    ///Return a mutable reference to the pixel located at (x, y)
+    fn get_mut_pixel(&mut self, x: u32, y: u32) -> &mut P;
+
+    ///Return an Iterator over mutable pixels of this image.
+    ///The iterator yeilds the coordiates of each pixel
+    ///along with a mutable reference to them.
+    fn mut_pixels(&mut self) -> MutPixels<Self> {
+        let (width, height) = self.dimensions();
+
+        MutPixels {
             image:  self,
             x:      0,
             y:      0,
@@ -225,12 +285,12 @@ impl<T: Primitive, P: Pixel<T>> ImageBuf<P> {
     }
 
     ///Return an immutable reference to this image's pixel buffer
-    pub fn pixelbuf < 'a>(&'a self) -> &'a [P] {
+    pub fn pixelbuf(&self) -> & [P] {
         self.pixels.as_slice()
     }
 
     ///Return a mutable reference to this image's pixel buffer
-    pub fn mut_pixelbuf < 'a>(&'a mut self) -> &'a mut [P] {
+    pub fn mut_pixelbuf(&mut self) -> &mut [P] {
         self.pixels.as_mut_slice()
     }
 }
@@ -258,8 +318,16 @@ impl<T: Primitive, P: Pixel<T> + Clone + Copy> GenericImage<P> for ImageBuf<P> {
     }
 }
 
+impl<T: Primitive, P: Pixel<T> + Clone + Copy> MutableRefImage<P> for ImageBuf<P> {
+    fn get_mut_pixel(&mut self, x: u32, y: u32) -> &mut P {
+        let index = y * self.width + x;
+
+        self.pixels.get_mut(index as uint)
+    }
+}
+
 impl<T: Primitive, P: Pixel<T>> Index<(u32, u32), P> for ImageBuf<P> {
-    fn index<'a>(&'a self, coords: &(u32, u32)) -> &'a P {
+    fn index(&self, coords: &(u32, u32)) -> &P {
         let &(x, y) = coords;
         let index  = y * self.width + x;
 
@@ -278,7 +346,7 @@ pub struct SubImage <'a, I> {
 
 impl<'a, T: Primitive, P: Pixel<T>, I: GenericImage<P>> SubImage<'a, I> {
     ///Construct a new subimage
-    pub fn new(image: &'a mut I, x: u32, y: u32, width: u32, height: u32) -> SubImage<'a, I > {
+    pub fn new(image: &mut I, x: u32, y: u32, width: u32, height: u32) -> SubImage<I> {
         SubImage {
             image:   image,
             xoffset: x,
@@ -289,7 +357,7 @@ impl<'a, T: Primitive, P: Pixel<T>, I: GenericImage<P>> SubImage<'a, I> {
     }
 
     ///Return a mutable reference to the wrapped image.
-    pub fn mut_inner<'a>(&'a mut self) -> &'a mut I {
+    pub fn mut_inner(&mut self) -> &mut I {
         &mut (*self.image)
     }
 
@@ -332,5 +400,11 @@ impl<'a, T: Primitive, P: Pixel<T>, I: GenericImage<P>> GenericImage<P> for SubI
 
     fn put_pixel(&mut self, x: u32, y: u32, pixel: P) {
         self.image.put_pixel(x + self.xoffset, y + self.yoffset, pixel)
+    }
+}
+
+impl<'a, T: Primitive, P: Pixel<T>, I: MutableRefImage<P>> MutableRefImage<P> for SubImage<'a, I> {
+    fn get_mut_pixel(&mut self, x: u32, y: u32) -> &mut P {
+        self.image.get_mut_pixel(x + self.xoffset, y + self.yoffset)
     }
 }

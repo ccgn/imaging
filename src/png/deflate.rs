@@ -101,7 +101,7 @@ impl<R: Reader> Inflater<R> {
     }
 
     /// Return a mutable reference to the wrapped Reader
-    pub fn inner < 'a>(&'a mut self) -> &'a mut R {
+    pub fn inner(&mut self) -> &mut R {
         &mut self.h.r
     }
 

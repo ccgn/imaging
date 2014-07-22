@@ -22,7 +22,7 @@ fn clamp <N: Num + PartialOrd> (a: N, min: N, max: N) -> N {
     else { a }
 }
 
-/// Convert ```pixels``` to grayscale
+/// Convert the supplied image to grayscale
 pub fn grayscale<P: Primitive + Default, T: Pixel<P>, I: GenericImage<T>> (
     image: &I) -> ImageBuf<Luma<P>> {
 
@@ -39,7 +39,7 @@ pub fn grayscale<P: Primitive + Default, T: Pixel<P>, I: GenericImage<T>> (
     out
 }
 
-/// Invert each pixel within ```pixels```
+/// Invert each pixel within the supplied image
 /// This function operates in place.
 pub fn invert<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(image: &mut I) {
     let (width, height) = image.dimensions();
@@ -54,7 +54,7 @@ pub fn invert<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(image: &mut I) {
     }
 }
 
-/// Adjust the contrast of ```pixels```
+/// Adjust the contrast of the supplied image
 /// ```contrast``` is the amount to adjust the contrast by.
 /// Negative values decrease the constrast and positive values increase the constrast.
 pub fn contrast<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
@@ -87,7 +87,7 @@ pub fn contrast<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
     out
 }
 
-/// Brighten ```pixels```
+/// Brighten the supplied image
 /// ```value``` is the amount to brighten each pixel by.
 /// Negative values decrease the brightness and positive values increase it.
 pub fn brighten<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(

@@ -643,7 +643,7 @@ impl BoolReader {
         self.value = 0;
 
         for _ in range(0u, 2) {
-            self.value = (self.value << 8) | self.buf.as_slice()[self.index] as u32;
+            self.value = (self.value << 8) | self.buf[self.index] as u32;
             self.index += 1;
         }
 
@@ -671,7 +671,7 @@ impl BoolReader {
 
             if self.bit_count == 8 {
                 self.bit_count = 0;
-                self.value |= self.buf.as_slice()[self.index] as u32;
+                self.value |= self.buf[self.index] as u32;
                 self.index += 1;
             }
         }
@@ -829,27 +829,28 @@ impl<R: Reader> VP8Decoder<R> {
     /// Create a new decoder.
     /// The reader must present a raw vp8 bitstream to the decoder
     pub fn new(r: R) -> VP8Decoder<R> {
-    let f: Frame = Default::default();
-    let s: Segment = Default::default();
-    let m = MacroBlock::new();
+        let f: Frame = Default::default();
+        let s: Segment = Default::default();
+        let m = MacroBlock::new();
 
-    VP8Decoder {
-        r: r,
-        b: BoolReader::new(),
+        VP8Decoder {
+            r: r,
+            b: BoolReader::new(),
 
-        mbwidth: 0,
-        mbheight: 0,
+            mbwidth: 0,
+            mbheight: 0,
 
-        frame: f,
-        segments_enabled: false,
-        segments_update_map: false,
-        segment: [s, ..MAX_SEGMENTS as uint],
+            frame: f,
+            segments_enabled: false,
+            segments_update_map: false,
+            segment: [s, ..MAX_SEGMENTS as uint],
 
-        partitions: [
-            BoolReader::new(), BoolReader::new(),
-            BoolReader::new(), BoolReader::new(),
-            BoolReader::new(), BoolReader::new(),
-            BoolReader::new(), BoolReader::new(),],
+            partitions: [
+                BoolReader::new(), BoolReader::new(),
+                BoolReader::new(), BoolReader::new(),
+                BoolReader::new(), BoolReader::new(),
+                BoolReader::new(), BoolReader::new(),],
+
             num_partitions: 1,
 
             segment_tree_probs: [255u8, ..3],
@@ -867,7 +868,7 @@ impl<R: Reader> VP8Decoder<R> {
             top_border: Vec::new(),
             left_border: Vec::new(),
         }
-    }
+}
 
     fn update_token_probabilities(&mut self) {
         for i in range(0u, 4) {
@@ -1380,7 +1381,7 @@ impl<R: Reader> VP8Decoder<R> {
     }
 
     /// Decodes the current frame and returns a reference to it
-    pub fn decode_frame<'a>(&'a mut self) -> IoResult<&'a Frame> {
+    pub fn decode_frame(&mut self) -> IoResult<&Frame> {
         let _ = try!(self.read_frame_header());
 
         for mby in range(0, self.mbheight as uint) {

@@ -51,11 +51,18 @@ pub use image:: {
     PPM
 };
 
-pub use ImageBuf     = image::ImageBuf;
-pub use GenericImage = image::GenericImage;
-pub use SubImage     = image::SubImage;
-pub use Pixels       = image::Pixels;
-pub use DynamicImage = dynimage::DynamicImage;
+//Image Types
+pub use SubImage        = image::SubImage;
+pub use ImageBuf        = image::ImageBuf;
+pub use DynamicImage    = dynimage::DynamicImage;
+
+//Traits
+pub use GenericImage    = image::GenericImage;
+pub use MutableRefImage = image::MutableRefImage;
+
+//Iterators
+pub use Pixels          = image::Pixels;
+pub use MutPixels       = image::MutPixels;
 
 ///opening and loading images
 pub use dynimage:: {

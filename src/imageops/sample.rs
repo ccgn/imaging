@@ -135,12 +135,10 @@ fn clamp<N: Num + PartialOrd>(a: N, min: N, max: N) -> N {
     else { a }
 }
 
-// Sample the rows of ```pixels`` using the provided filter.
-// The height of ```pixels``` remains unchanged.
-// ```width``` is the current width of ```pixels```.
-// ```height``` is the current height of ```pixels```.
-// ```nwidth``` is the desired width of ```pixels```
-// ```method``` is the filter to use for sampling.
+// Sample the rows of the supplied image using the provided filter.
+// The height of the image remains unchanged.
+// ```new_width``` is the desired width of the new image
+// ```filter``` is the filter to use for sampling.
 fn horizontal_sample<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
     image:     &I,
     new_width: u32,
@@ -223,12 +221,10 @@ fn horizontal_sample<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
     out
 }
 
-// Sample the columns of ```pixels`` using the provided filter.
-// The width of ```pixels``` remains unchanged.
-// ```width``` is the current width of ```pixels```.
-// ```height``` is the current height of ```pixels```.
-// ```nheight``` is the desired height of ```pixels```
-// ```method``` is the filter to use for sampling.
+// Sample the columns of the supplied image using the provided filter.
+// The width of the image remains unchanged.
+// ```new_height``` is the desired height of the new image
+// ```filter``` is the filter to use for sampling.
 fn vertical_sample<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
     image:      &I,
     new_height: u32,
@@ -312,9 +308,7 @@ fn vertical_sample<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
     out
 }
 
-/// Perform a 3x3 box filter on ```pixels```.
-/// ```width``` is the width of pixels.
-/// ```height``` is the height of pixels.
+/// Perform a 3x3 box filter on the supplied image.
 /// ```kernel``` is an array of the filter weights of length 9.
 pub fn filter3x3<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
     image:  &I,
@@ -396,8 +390,7 @@ pub fn filter3x3<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
     out
 }
 
-/// Resize ```pixels```.
-/// ```width``` and ```height``` are the original dimensions.
+/// Resize the supplied image to the specified dimensions
 /// ```nwidth``` and ```nheight``` are the new dimensions.
 /// ```filter``` is the sampling filter to use.
 pub fn resize<A: Primitive, T: Pixel<A>, I: GenericImage<T>>(
@@ -433,8 +426,7 @@ pub fn resize<A: Primitive, T: Pixel<A>, I: GenericImage<T>>(
     horizontal_sample(&tmp, nwidth, &mut method)
 }
 
-/// Perfomrs a Gausian blur on ```pixels```
-/// ```width``` and ```height``` are the dimensions of the buffer.
+/// Perfomrs a Gausian blur on the supplied image.
 /// ```sigma``` is a meausure of how much to blur by.
 pub fn blur<A: Primitive, T: Pixel<A>, I: GenericImage<T>>(
     image:  &I,
@@ -459,7 +451,7 @@ pub fn blur<A: Primitive, T: Pixel<A>, I: GenericImage<T>>(
     horizontal_sample(&tmp, width, &mut method)
 }
 
-/// Performs an unsharpen mask on ```pixels```
+/// Performs an unsharpen mask on the supplied image
 /// ```sigma``` is the amount to blur the image by.
 /// ```threshold``` is the threshold for the difference between
 /// see https://en.wikipedia.org/wiki/Unsharp_masking#Digital_unsharp_masking

@@ -48,12 +48,12 @@ mod colorops;
 mod sample;
 
 /// Return a mutable view into an image
-pub fn crop<'a, P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
-    image:  &'a mut I,
+pub fn crop<P: Primitive, T: Pixel<P>, I: GenericImage<T>>(
+    image:  &mut I,
     x: u32,
     y: u32,
     width: u32,
-    height: u32) -> SubImage <'a, I> {
+    height: u32) -> SubImage<I> {
 
     let (iwidth, iheight) = image.dimensions();
 
